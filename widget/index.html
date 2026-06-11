@@ -6,99 +6,178 @@
 <meta name="color-scheme" content="light dark" />
 <title>Lineage viewer</title>
 <style>
+  /* ---- design tokens ------------------------------------------------- */
   :root {
-    --ink: #1e2430; --muted: #5b6472; --faint: #8a93a3; --line: #d3d0ca;
-    --panel: #ffffff; --accent: #3450a3; --focus: #4e8a5f; --soft: #eef2f8;
+    --canvas: #fafbfd; --dot: #e4e7f1;
+    --surface: #ffffff; --hair: #e7e9f1; --node-border: #c2c8d8;
+    --ink: #1a1f2e; --muted: #6b7280; --faint: #9aa1b2;
+    --accent: #4456c7; --accent-weak: #eef0fb; --ring: rgba(68,86,199,.18);
+    --edge: #c4c9d6; --edge-strong: #4456c7; --shadow: rgba(23,30,60,.10);
+    --err: #b3402e;
+    --k-source: #5b7fa6; --k-staging: #c08a3e; --k-fact: #4e8a5f;
+    --k-metric: #7d5ba6; --k-view: #3e8f96;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Cascadia Mono", Menlo, Consolas, monospace;
   }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+  :root[data-theme="dark"], :root:not([data-theme="light"]) { }
+
+  /* dark palette */
+  :root[data-theme="dark"] {
+    --canvas: #14171f; --dot: #272d3b;
+    --surface: #1e2230; --hair: #2b3140; --node-border: #424b61;
+    --ink: #e8ebf3; --muted: #99a2b4; --faint: #69728a;
+    --accent: #8aa6e8; --accent-weak: #232b41; --ring: rgba(138,166,232,.22);
+    --edge: #3a4154; --edge-strong: #8aa6e8; --shadow: rgba(0,0,0,.55);
+    --err: #e8917f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --canvas: #14171f; --dot: #272d3b;
+      --surface: #1e2230; --hair: #2b3140; --node-border: #424b61;
+      --ink: #e8ebf3; --muted: #99a2b4; --faint: #69728a;
+      --accent: #8aa6e8; --accent-weak: #232b41; --ring: rgba(138,166,232,.22);
+      --edge: #3a4154; --edge-strong: #8aa6e8; --shadow: rgba(0,0,0,.55);
+      --err: #e8917f;
+    }
+  }
+
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
     font-family: var(--mcp-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif);
-    color: var(--ink); background: var(--panel);
-    display: flex; flex-direction: column; min-height: 470px;
-  }
-  header {
-    padding: 12px 16px 8px; border-bottom: 1px solid #eef0f3;
-    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-  }
-  header h1 { font-size: 15px; margin: 0; font-weight: 700; }
-  header .src { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--faint); }
-  header .badge {
-    margin-left: auto; font-size: 10.5px; color: var(--accent);
-    border: 1px solid #c3cede; border-radius: 999px; padding: 2px 9px; background: var(--soft); white-space: nowrap;
+    color: var(--ink); background: var(--surface);
+    display: flex; flex-direction: column; min-height: 480px;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   }
 
-  #stage { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+  /* ---- header -------------------------------------------------------- */
+  header {
+    padding: 13px 18px 12px; display: flex; align-items: center; gap: 11px;
+    border-bottom: 1px solid var(--hair); background: var(--surface);
+  }
+  header .title { font-size: 13.5px; font-weight: 650; letter-spacing: -.01em; }
+  header .focus {
+    font-family: var(--mono); font-size: 11.5px; color: var(--accent);
+    background: var(--accent-weak); border-radius: 6px; padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  header .focus::before { content: "› "; color: var(--faint); }
+  header .spacer { flex: 1; }
+  header .badge {
+    font-size: 10px; letter-spacing: .03em; text-transform: uppercase;
+    color: var(--faint); border: 1px solid var(--hair); border-radius: 999px; padding: 3px 9px;
+  }
+
+  /* ---- canvas -------------------------------------------------------- */
+  #stage {
+    flex: 1; min-height: 0; position: relative; overflow: hidden;
+    background-color: var(--canvas);
+    background-image: radial-gradient(var(--dot) 1.1px, transparent 1.1px);
+    background-size: 22px 22px; background-position: -1px -1px;
+  }
   svg { width: 100%; height: 100%; display: block; }
 
-  /* nodes */
-  .node-box { cursor: pointer; }
-  .node-box rect.body { fill: #fff; stroke: var(--line); stroke-width: 1.4; transition: stroke .12s ease; }
-  .node-box:hover rect.body { stroke: var(--accent); }
-  .node-box.focus rect.body { stroke: var(--focus); stroke-width: 2.4; }
-  .node-box.selected rect.body { stroke: var(--accent); stroke-width: 2.6; }
-  .node-box text.label { font-size: 12px; fill: var(--ink); }
-  .node-box.focus text.label { font-weight: 700; }
-  .node-box text.kind { font-size: 9.5px; fill: var(--faint); text-transform: uppercase; letter-spacing: .04em; }
-  .edge { fill: none; stroke: #b9b6af; stroke-width: 1.6; }
-  .edge.focus { stroke: var(--accent); stroke-width: 2.2; }
-  .edge.new { stroke-dasharray: 6 4; }
+  /* ---- edges --------------------------------------------------------- */
+  .edge { fill: none; stroke: var(--edge); stroke-width: 1.5; marker-end: url(#ah); transition: opacity .18s, stroke .18s; }
+  .edge.trace { stroke: var(--edge-strong); stroke-width: 2; marker-end: url(#ah-strong); stroke-dasharray: 7 5; animation: flow 1s linear infinite; }
+  .edge.dim { opacity: .16; }
+  @keyframes flow { to { stroke-dashoffset: -24; } }
+  #ah path { fill: var(--edge); }
+  #ah-strong path { fill: var(--edge-strong); }
 
-  /* expand/collapse toggles */
+  /* ---- nodes --------------------------------------------------------- */
+  .node-box { cursor: pointer; transition: opacity .18s; }
+  .node-box .body {
+    fill: var(--surface); stroke: var(--node-border); stroke-width: 1.4;
+    filter: drop-shadow(0 1px 2px var(--shadow)); transition: stroke .14s;
+  }
+  .node-box:hover .body { stroke: color-mix(in srgb, var(--accent) 55%, var(--hair)); }
+  .node-box.focus .body { stroke: var(--k-fact); stroke-width: 2; }
+  .node-box.selected .body { stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 0 3px var(--ring)); }
+  .node-box.dim { opacity: .28; }
+  .node-box .label { font-family: var(--mono); font-size: 12px; font-weight: 500; fill: var(--ink); }
+  .node-box.focus .label { font-weight: 650; }
+  .node-box .kind { font-size: 9px; font-weight: 600; letter-spacing: .07em; fill: var(--faint); text-transform: uppercase; }
+  .node-box .star { fill: var(--k-fact); font-size: 11px; }
+
+  /* ---- expand / collapse toggles ------------------------------------ */
   .toggle { cursor: pointer; }
-  .toggle circle { fill: #fff; stroke: var(--accent); stroke-width: 1.4; transition: fill .1s; }
-  .toggle:hover circle { fill: var(--soft); }
-  .toggle text { font-size: 13px; font-weight: 700; fill: var(--accent); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .toggle .pill { fill: var(--surface); stroke: var(--accent); stroke-width: 1.3; filter: drop-shadow(0 1px 1.5px var(--shadow)); transition: fill .12s; }
+  .toggle:hover .pill { fill: var(--accent-weak); }
+  .toggle text { font-family: var(--mono); font-size: 10.5px; font-weight: 700; fill: var(--accent); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 
-  /* details panel */
+  /* ---- details panel ------------------------------------------------- */
   #details {
-    position: absolute; top: 10px; right: 10px; bottom: 10px; width: 268px;
-    background: #fff; border: 1px solid var(--line); border-radius: 10px;
-    box-shadow: 0 6px 24px rgba(20,30,60,.12); padding: 14px 16px;
-    overflow-y: auto; display: none; font-size: 12.5px;
+    position: absolute; top: 12px; right: 12px; bottom: 12px; width: 272px;
+    background: var(--surface); border: 1px solid var(--hair); border-radius: 12px;
+    box-shadow: 0 10px 30px var(--shadow); padding: 0; overflow: hidden;
+    display: none; font-size: 12.5px;
+    opacity: 0; transform: translateX(10px); transition: opacity .2s ease, transform .2s ease;
   }
-  #details.open { display: block; }
-  #details .dh { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
-  #details .dh .accent { width: 10px; height: 10px; border-radius: 3px; }
-  #details h2 { font-size: 15px; margin: 0; font-weight: 700; }
-  #details .kind { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); margin: 0 0 8px; }
-  #details .desc { color: var(--muted); margin: 0 0 12px; line-height: 1.45; }
-  #details dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 12px; }
-  #details dt { color: var(--faint); }
-  #details dd { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; }
-  #details .sec { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); margin: 10px 0 4px; }
-  #details .cols span, #details .nbr span {
-    display: inline-block; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
-    background: var(--soft); border: 1px solid #dbe2f0; border-radius: 5px; padding: 1px 6px; margin: 0 4px 4px 0;
+  #details.open { display: flex; flex-direction: column; opacity: 1; transform: none; }
+  #details .phead { padding: 14px 16px 12px; border-bottom: 1px solid var(--hair); position: relative; }
+  #details .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  #details .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  #details h2 { font-family: var(--mono); font-size: 14.5px; font-weight: 600; margin: 7px 0 0; word-break: break-all; }
+  #details .body { padding: 12px 16px 16px; overflow-y: auto; }
+  #details .desc { color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
+  #details dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; margin: 0; }
+  #details dt { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; align-self: center; }
+  #details dd { margin: 0; font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  #details .sec { font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin: 16px 0 7px; padding-top: 12px; border-top: 1px solid var(--hair); }
+  #details .chips span {
+    display: inline-block; font-family: var(--mono); font-size: 11px; color: var(--ink);
+    background: var(--accent-weak); border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+    border-radius: 6px; padding: 2px 7px; margin: 0 5px 5px 0;
   }
-  #details .close { position: absolute; top: 10px; right: 12px; cursor: pointer; color: var(--faint); font-size: 16px; line-height: 1; border: 0; background: none; }
-  #details .close:hover { color: var(--ink); }
+  #details .close { position: absolute; top: 12px; right: 13px; cursor: pointer; color: var(--faint); font-size: 15px; line-height: 1; border: 0; background: none; padding: 2px; border-radius: 5px; }
+  #details .close:hover { color: var(--ink); background: var(--hair); }
 
-  footer { border-top: 1px solid #eef0f3; padding: 9px 16px; display: flex; align-items: center; gap: 12px; }
-  #status { font-size: 12px; color: var(--muted); }
-  #status.err { color: #b3402e; }
+  /* ---- footer -------------------------------------------------------- */
+  footer { border-top: 1px solid var(--hair); padding: 10px 18px; display: flex; align-items: center; gap: 13px; background: var(--surface); }
+  #status { font-size: 11.5px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #status.err { color: var(--err); }
   button.ghost {
-    font: inherit; font-size: 12px; color: var(--accent); background: #fff;
-    border: 1px solid #c3cede; border-radius: 7px; padding: 6px 11px; cursor: pointer;
+    font: inherit; font-size: 11.5px; font-weight: 500; color: var(--muted); background: transparent;
+    border: 1px solid var(--hair); border-radius: 7px; padding: 5px 11px; cursor: pointer; transition: all .12s; white-space: nowrap;
   }
-  button.ghost:hover { background: var(--soft); }
-  .legend { margin-left: auto; display: flex; gap: 11px; font-size: 10.5px; color: var(--muted); flex-wrap: wrap; }
-  .legend span { display: inline-flex; align-items: center; gap: 4px; }
-  .legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+  button.ghost:hover { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
+  .legend { margin-left: auto; display: flex; gap: 12px; font-size: 10px; color: var(--muted); flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .edge.trace { animation: none; }
+    *, #details { transition: none !important; }
+  }
 </style>
 </head>
 <body>
   <header>
-    <h1>Data lineage</h1>
-    <span class="src">ui://lineage/viewer.html</span>
-    <span class="badge">MCP App · proxied through host</span>
+    <span class="title">Data lineage</span>
+    <span class="focus" id="focus-chip">fct_patient_visits</span>
+    <span class="spacer"></span>
+    <span class="badge">MCP App</span>
   </header>
 
   <div id="stage">
-    <svg id="svg" preserveAspectRatio="xMidYMid meet" aria-label="lineage graph"></svg>
+    <svg id="svg" preserveAspectRatio="xMidYMid meet" aria-label="lineage graph">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0 1 L9 5 L0 9 z" />
+        </marker>
+        <marker id="ah-strong" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0 1 L9 5 L0 9 z" />
+        </marker>
+      </defs>
+    </svg>
     <aside id="details">
-      <button class="close" id="details-close" title="Close">✕</button>
-      <div id="details-body"></div>
+      <div class="phead">
+        <button class="close" id="details-close" title="Close">✕</button>
+        <div id="details-head"></div>
+      </div>
+      <div class="body" id="details-body"></div>
     </aside>
   </div>
 

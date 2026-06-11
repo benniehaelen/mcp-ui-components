@@ -18,6 +18,11 @@ panel populated by a proxied `describe_node`:
 
 ![Live control](docs/vscode-control.png)
 
+It follows the host's theme (and the OS `prefers-color-scheme` in the offline
+demo), so it renders in dark mode too:
+
+![Dark mode](docs/vscode-control-dark.png)
+
 ---
 
 ## What's in the box

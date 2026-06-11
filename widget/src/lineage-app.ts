@@ -5,13 +5,16 @@
  * renders as a real interactive control in MCP Apps hosts (VS Code Copilot,
  * Claude Desktop, …).
  *
- * Interactions — every one that needs data is proxied through the host as a
- * governed MCP tool call:
- *   - initial render        ← `view_lineage` result via `app.ontoolresult`
- *   - click a node          → `describe_node`         (details panel)
- *   - ＋ on a node          → `expand_lineage_node`    (reveal neighbours)
- *   - − on a node           → collapse (local; hides the branch)
- *   - double-click a node   → `view_lineage`           (recenter on that node)
+ * Every interaction that needs data is proxied through the host as a governed
+ * MCP tool call:
+ *   - initial render      ← `view_lineage` result via `app.ontoolresult`
+ *   - click a node        → `describe_node`         (details panel)
+ *   - ＋ on a node        → `expand_lineage_node`    (reveal neighbours)
+ *   - − on a node         → collapse (local)
+ *   - double-click a node → `view_lineage`           (recenter)
+ *
+ * Hovering a node traces its full lineage (upstream + downstream) and dims the
+ * rest — locally, no tool call.
  */
 import {
   App,
@@ -32,35 +35,51 @@ const KIND_COLOR: Record<string, string> = {
   source: "#5b7fa6", staging: "#c08a3e", fact: "#4e8a5f",
   metric: "#7d5ba6", view: "#3e8f96",
 };
-const NODE_W = 132, NODE_H = 46, COL_GAP = 92, ROW_GAP = 22, PAD = 30;
+const NODE_W = 152, NODE_H = 50, COL_GAP = 96, ROW_GAP = 24, PAD = 34;
 const SVGNS = "http://www.w3.org/2000/svg";
 
 const svg = document.getElementById("svg") as unknown as SVGSVGElement;
 const statusEl = document.getElementById("status") as HTMLElement;
+const focusChip = document.getElementById("focus-chip") as HTMLElement;
 const detailsEl = document.getElementById("details") as HTMLElement;
+const detailsHead = document.getElementById("details-head") as HTMLElement;
 const detailsBody = document.getElementById("details-body") as HTMLElement;
 
 let graph: Graph = { focus: "", nodes: [], edges: [] };
 let initialGraph: Graph | null = null;
-let newIds: Record<string, boolean> = {};
 let selected: string | null = null;
 let busy = false;
 
-// ---- small graph helpers (operate on the *visible* graph) --------------
+// live element refs so hover-trace doesn't rebuild the whole SVG
+let content: SVGGElement | null = null;
+const nodeEls = new Map<string, SVGGElement>();
+let edgeEls: { el: SVGPathElement; source: string; target: string }[] = [];
+
+// ---- visible-graph helpers ----------------------------------------------
 const nodeById = (id: string) => graph.nodes.find((n) => n.id === id);
 const visParents = (id: string) => graph.edges.filter((e) => e.target === id).map((e) => e.source);
 const visChildren = (id: string) => graph.edges.filter((e) => e.source === id).map((e) => e.target);
 const visibleIds = () => graph.nodes.map((n) => n.id);
 
-function hiddenIn(id: string, dir: "upstream" | "downstream"): boolean {
+function hiddenCount(id: string, dir: "upstream" | "downstream"): number {
   const n = nodeById(id);
-  if (!n) return false;
+  if (!n) return 0;
   const total = dir === "upstream" ? n.upstreamCount : n.downstreamCount;
   const shown = (dir === "upstream" ? visParents(id) : visChildren(id)).length;
-  return shown < total;
+  return Math.max(0, total - shown);
 }
 function shownIn(id: string, dir: "upstream" | "downstream"): boolean {
   return (dir === "upstream" ? visParents(id) : visChildren(id)).length > 0;
+}
+
+/** The node's full lineage within the visible graph: it + ancestors + descendants. */
+function lineageSet(id: string): Set<string> {
+  const set = new Set<string>([id]);
+  let q = [id];
+  while (q.length) { const x = q.pop()!; for (const p of visParents(x)) if (!set.has(p)) { set.add(p); q.push(p); } }
+  q = [id];
+  while (q.length) { const x = q.pop()!; for (const c of visChildren(x)) if (!set.has(c)) { set.add(c); q.push(c); } }
+  return set;
 }
 
 // ---- rendering ----------------------------------------------------------
@@ -88,44 +107,51 @@ function layout(nodes: Node[]) {
   });
   const width = PAD * 2 + layers.length * NODE_W + (layers.length - 1) * COL_GAP;
   const height = PAD * 2 + contentH;
-  return { pos, width, height: Math.max(height, 170) };
+  return { pos, width, height: Math.max(height, 180) };
 }
 
 function edgePath(a: { x: number; y: number }, b: { x: number; y: number }) {
-  const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2;
-  const mx = (x1 + x2) / 2;
-  return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+  const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x - 5, y2 = b.y + NODE_H / 2;
+  const dx = Math.max(28, (x2 - x1) * 0.5);
+  return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 }
 
 function makeToggle(
-  cx: number, cy: number, plus: boolean,
-  node: string, dir: "upstream" | "downstream", onClick: () => void,
+  cx: number, cy: number, label: string,
+  node: string, dir: "upstream" | "downstream", mode: "expand" | "collapse",
+  onClick: () => void,
 ) {
+  const w = label.length <= 1 ? 19 : 13 + label.length * 7;
+  const h = 18;
   const g = el("g", {
     class: "toggle", transform: `translate(${cx},${cy})`,
-    "data-node": node, "data-dir": dir, "data-mode": plus ? "expand" : "collapse",
+    "data-node": node, "data-dir": dir, "data-mode": mode,
   });
-  g.appendChild(el("circle", { r: 9 }));
+  g.appendChild(el("rect", { class: "pill", x: -w / 2, y: -h / 2, width: w, height: h, rx: 9 }));
   const t = el("text", { x: 0, y: 0 });
-  t.textContent = plus ? "+" : "−"; // − minus sign
+  t.textContent = label;
   g.appendChild(t);
   g.addEventListener("click", (ev) => { ev.stopPropagation(); onClick(); });
   return g;
 }
 
 function render() {
-  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  // keep <defs>; render into a dedicated content group
+  if (!content) { content = el("g", { id: "content" }) as SVGGElement; svg.appendChild(content); }
+  while (content.firstChild) content.removeChild(content.firstChild);
+  nodeEls.clear();
+  edgeEls = [];
   if (!graph.nodes.length) return;
+
   const L = layout(graph.nodes);
   svg.setAttribute("viewBox", `0 0 ${L.width} ${L.height}`);
 
   graph.edges.forEach((e) => {
     const a = L.pos[e.source], b = L.pos[e.target];
     if (!a || !b) return;
-    let cls = "edge";
-    if (e.source === graph.focus || e.target === graph.focus) cls += " focus";
-    if (newIds[e.source] || newIds[e.target]) cls += " new";
-    svg.appendChild(el("path", { d: edgePath(a, b), class: cls }));
+    const path = el("path", { d: edgePath(a, b), class: "edge" }) as SVGPathElement;
+    content!.appendChild(path);
+    edgeEls.push({ el: path, source: e.source, target: e.target });
   });
 
   graph.nodes.forEach((n) => {
@@ -134,41 +160,66 @@ function render() {
     const g = el("g", {
       class: "node-box" + (n.isFocus ? " focus" : "") + (selected === n.id ? " selected" : ""),
       transform: `translate(${p.x},${p.y})`,
-    });
-    g.appendChild(el("rect", { class: "body", width: NODE_W, height: NODE_H, rx: 7 }));
-    g.appendChild(el("rect", { x: 0, y: 0, width: 5, height: NODE_H, rx: 2, fill: KIND_COLOR[n.kind] || "#9aa1ad" }));
-    const label = el("text", { class: "label", x: 16, y: 21 });
+    }) as SVGGElement;
+    g.appendChild(el("rect", { class: "body", width: NODE_W, height: NODE_H, rx: 9 }));
+    g.appendChild(el("rect", { x: 0, y: 0, width: 4, height: NODE_H, rx: 2, fill: KIND_COLOR[n.kind] || "#9aa1ad" }));
+    const label = el("text", { class: "label", x: 17, y: 23 });
     label.textContent = n.label;
     g.appendChild(label);
-    const kind = el("text", { class: "kind", x: 16, y: 35 });
+    const kind = el("text", { class: "kind", x: 17, y: 38 });
     kind.textContent = n.kind;
     g.appendChild(kind);
     if (n.isFocus) {
-      const star = el("text", { x: NODE_W - 15, y: 21, "font-size": 12, fill: "#4e8a5f" });
+      const star = el("text", { class: "star", x: NODE_W - 16, y: 23 });
       star.textContent = "★";
       g.appendChild(star);
     }
     g.addEventListener("click", () => selectNode(n.id));
     g.addEventListener("dblclick", () => refocus(n.id));
-    svg.appendChild(g);
+    g.addEventListener("mouseenter", () => { if (!selected) applyTrace(n.id); });
+    g.addEventListener("mouseleave", () => { if (!selected) applyTrace(null); });
+    content!.appendChild(g);
+    nodeEls.set(n.id, g);
 
-    // expand/collapse toggles, drawn outside the node body
+    // toggles
     if (n.upstreamCount > 0) {
-      const canExpand = hiddenIn(n.id, "upstream");
-      const canCollapse = !canExpand && shownIn(n.id, "upstream");
-      if (canExpand || canCollapse) {
-        svg.appendChild(makeToggle(p.x - 2, p.y + NODE_H / 2, canExpand, n.id, "upstream",
-          () => canExpand ? expand(n.id, "upstream") : collapse(n.id, "upstream")));
+      const hid = hiddenCount(n.id, "upstream");
+      if (hid > 0) {
+        content!.appendChild(makeToggle(p.x - 13, p.y + NODE_H / 2, "+" + hid, n.id, "upstream", "expand",
+          () => expand(n.id, "upstream")));
+      } else if (shownIn(n.id, "upstream")) {
+        content!.appendChild(makeToggle(p.x - 13, p.y + NODE_H / 2, "−", n.id, "upstream", "collapse",
+          () => collapse(n.id, "upstream")));
       }
     }
     if (n.downstreamCount > 0) {
-      const canExpand = hiddenIn(n.id, "downstream");
-      const canCollapse = !canExpand && shownIn(n.id, "downstream");
-      if (canExpand || canCollapse) {
-        svg.appendChild(makeToggle(p.x + NODE_W + 2, p.y + NODE_H / 2, canExpand, n.id, "downstream",
-          () => canExpand ? expand(n.id, "downstream") : collapse(n.id, "downstream")));
+      const hid = hiddenCount(n.id, "downstream");
+      if (hid > 0) {
+        content!.appendChild(makeToggle(p.x + NODE_W + 13, p.y + NODE_H / 2, "+" + hid, n.id, "downstream", "expand",
+          () => expand(n.id, "downstream")));
+      } else if (shownIn(n.id, "downstream")) {
+        content!.appendChild(makeToggle(p.x + NODE_W + 13, p.y + NODE_H / 2, "−", n.id, "downstream", "collapse",
+          () => collapse(n.id, "downstream")));
       }
     }
+  });
+
+  if (selected) applyTrace(selected);
+}
+
+/** Highlight a node's lineage and dim the rest (or clear when id is null). */
+function applyTrace(id: string | null) {
+  if (!id) {
+    nodeEls.forEach((g) => g.classList.remove("dim"));
+    edgeEls.forEach(({ el }) => el.classList.remove("trace", "dim"));
+    return;
+  }
+  const set = lineageSet(id);
+  nodeEls.forEach((g, nid) => g.classList.toggle("dim", !set.has(nid)));
+  edgeEls.forEach(({ el, source, target }) => {
+    const on = set.has(source) && set.has(target);
+    el.classList.toggle("trace", on);
+    el.classList.toggle("dim", !on);
   });
 }
 
@@ -176,8 +227,8 @@ function render() {
 function setGraph(data: Graph, keepInitial = false) {
   graph = { focus: data.focus, nodes: (data.nodes || []).slice(), edges: (data.edges || []).slice() };
   if (!keepInitial) initialGraph = JSON.parse(JSON.stringify(graph));
-  newIds = {};
   selected = null;
+  focusChip.textContent = graph.focus;
   closeDetails();
   render();
   setStatus(summary());
@@ -186,17 +237,13 @@ function setGraph(data: Graph, keepInitial = false) {
 function mergeAdded(res: { addedNodes?: Node[]; addedEdges?: Edge[] }) {
   const have: Record<string, boolean> = {};
   graph.nodes.forEach((n) => (have[n.id] = true));
-  const added: Record<string, boolean> = {};
-  (res.addedNodes || []).forEach((n) => {
-    if (!have[n.id]) { graph.nodes.push(n); have[n.id] = true; added[n.id] = true; }
-  });
+  (res.addedNodes || []).forEach((n) => { if (!have[n.id]) { graph.nodes.push(n); have[n.id] = true; } });
   const ek: Record<string, boolean> = {};
   graph.edges.forEach((e) => (ek[e.source + ">" + e.target] = true));
   (res.addedEdges || []).forEach((e) => {
     const k = e.source + ">" + e.target;
     if (!ek[k]) { graph.edges.push(e); ek[k] = true; }
   });
-  newIds = added;
   render();
 }
 
@@ -208,20 +255,17 @@ function collapse(node: string, dir: "upstream" | "downstream") {
   while (queue.length) {
     const x = queue.pop()!;
     if (removed.has(x) || x === graph.focus) continue;
-    // links that keep x alive (its dependants on the far side)
     const far = dir === "upstream" ? visChildren(x) : visParents(x);
     const alive = far.filter((c) => c !== node && !removed.has(c));
     if (alive.length === 0) {
       removed.add(x);
-      const next = dir === "upstream" ? visParents(x) : visChildren(x);
-      next.forEach((p) => queue.push(p));
+      (dir === "upstream" ? visParents(x) : visChildren(x)).forEach((p) => queue.push(p));
     }
   }
   if (!removed.size) return;
   graph.nodes = graph.nodes.filter((n) => !removed.has(n.id));
   graph.edges = graph.edges.filter((e) => !removed.has(e.source) && !removed.has(e.target));
   if (selected && removed.has(selected)) closeDetails();
-  newIds = {};
   render();
   setStatus(`Collapsed ${removed.size} node${removed.size > 1 ? "s" : ""} · ${summary()}`);
 }
@@ -242,9 +286,7 @@ async function expand(node: string, dir: "upstream" | "downstream") {
                  : `Nothing more ${dir} · ${summary()}`);
   } catch (e: any) {
     setStatus("Expand failed: " + (e?.message || e), true);
-  } finally {
-    busy = false;
-  }
+  } finally { busy = false; }
 }
 
 async function refocus(node: string) {
@@ -257,34 +299,35 @@ async function refocus(node: string) {
     setStatus(`Focus: ${node} · ${summary()}`);
   } catch (e: any) {
     setStatus("Recenter failed: " + (e?.message || e), true);
-  } finally {
-    busy = false;
-  }
+  } finally { busy = false; }
 }
 
 async function selectNode(id: string) {
   selected = id;
-  render();
+  nodeEls.forEach((g, nid) => g.classList.toggle("selected", nid === id));
+  applyTrace(id);
   const n = nodeById(id);
+  const color = KIND_COLOR[n?.kind || ""] || "#9aa1ad";
   detailsEl.classList.add("open");
-  detailsBody.innerHTML = `<div class="kind">Loading…</div><h2>${n?.label ?? id}</h2>`;
+  detailsHead.innerHTML = `<div class="pill"><span class="dot" style="background:${color}"></span>${n?.kind ?? ""}</div><h2>${n?.label ?? id}</h2>`;
+  detailsBody.innerHTML = `<p class="desc">Loading details…</p>`;
   try {
     const res: any = await app.callServerTool({ name: "describe_node", arguments: { node: id } });
     renderDetails(res?.structuredContent || {});
-    setStatus(`${n?.label ?? id} — details fetched via describe_node`);
+    setStatus(`${n?.label ?? id} — details via describe_node`);
   } catch (e: any) {
-    detailsBody.innerHTML = `<h2>${n?.label ?? id}</h2><p class="desc">Could not load details: ${e?.message || e}</p>`;
+    detailsBody.innerHTML = `<p class="desc">Couldn't load details: ${e?.message || e}</p>`;
   }
 }
 
 function renderDetails(d: any) {
   const color = KIND_COLOR[d.kind] || "#9aa1ad";
-  const fmt = (v: any) => (typeof v === "number" ? v.toLocaleString() : v ?? "—");
+  const fmt = (v: any) => (typeof v === "number" ? v.toLocaleString() : (v ?? "—"));
   const chips = (arr: string[]) =>
     (arr && arr.length) ? arr.map((c) => `<span>${c}</span>`).join("") : "<span>—</span>";
+  detailsHead.innerHTML =
+    `<div class="pill"><span class="dot" style="background:${color}"></span>${d.kind ?? ""}</div><h2>${d.label ?? ""}</h2>`;
   detailsBody.innerHTML = `
-    <div class="dh"><span class="accent" style="background:${color}"></span><h2>${d.label ?? ""}</h2></div>
-    <p class="kind">${d.kind ?? ""}</p>
     <p class="desc">${d.description ?? ""}</p>
     <dl>
       <dt>owner</dt><dd>${d.owner ?? "—"}</dd>
@@ -292,14 +335,18 @@ function renderDetails(d: any) {
       <dt>rows</dt><dd>${fmt(d.rows)}</dd>
       <dt>updated</dt><dd>${d.updated ?? "—"}</dd>
     </dl>
-    <div class="sec">columns</div><div class="cols">${chips(d.columns)}</div>
-    <div class="sec">upstream</div><div class="nbr">${chips(d.upstream)}</div>
-    <div class="sec">downstream</div><div class="nbr">${chips(d.downstream)}</div>`;
+    <div class="sec">columns</div><div class="chips">${chips(d.columns)}</div>
+    <div class="sec">upstream</div><div class="chips">${chips(d.upstream)}</div>
+    <div class="sec">downstream</div><div class="chips">${chips(d.downstream)}</div>`;
 }
 
 function closeDetails() {
   detailsEl.classList.remove("open");
-  if (selected) { selected = null; render(); }
+  if (selected) {
+    nodeEls.get(selected)?.classList.remove("selected");
+    selected = null;
+    applyTrace(null);
+  }
 }
 
 // ---- ui glue ------------------------------------------------------------
@@ -320,7 +367,7 @@ function applyHostContext(ctx: McpUiHostContext) {
 }
 
 // ---- MCP App wiring -----------------------------------------------------
-const app = new App({ name: "Lineage Viewer", version: "0.2.0" });
+const app = new App({ name: "Lineage Viewer", version: "0.3.0" });
 
 app.ontoolresult = (result: any) => {
   const sc = result?.structuredContent as Graph | undefined;
