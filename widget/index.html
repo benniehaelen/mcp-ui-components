@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Lineage viewer</title>
+<style>
+  :root {
+    --ink: #1e2430; --muted: #5b6472; --faint: #8a93a3; --line: #d3d0ca;
+    --panel: #ffffff; --accent: #3450a3; --focus: #4e8a5f; --soft: #eef2f8;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--mcp-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif);
+    color: var(--ink); background: var(--panel);
+    display: flex; flex-direction: column; min-height: 470px;
+  }
+  header {
+    padding: 12px 16px 8px; border-bottom: 1px solid #eef0f3;
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 700; }
+  header .src { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--faint); }
+  header .badge {
+    margin-left: auto; font-size: 10.5px; color: var(--accent);
+    border: 1px solid #c3cede; border-radius: 999px; padding: 2px 9px; background: var(--soft); white-space: nowrap;
+  }
+
+  #stage { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+  svg { width: 100%; height: 100%; display: block; }
+
+  /* nodes */
+  .node-box { cursor: pointer; }
+  .node-box rect.body { fill: #fff; stroke: var(--line); stroke-width: 1.4; transition: stroke .12s ease; }
+  .node-box:hover rect.body { stroke: var(--accent); }
+  .node-box.focus rect.body { stroke: var(--focus); stroke-width: 2.4; }
+  .node-box.selected rect.body { stroke: var(--accent); stroke-width: 2.6; }
+  .node-box text.label { font-size: 12px; fill: var(--ink); }
+  .node-box.focus text.label { font-weight: 700; }
+  .node-box text.kind { font-size: 9.5px; fill: var(--faint); text-transform: uppercase; letter-spacing: .04em; }
+  .edge { fill: none; stroke: #b9b6af; stroke-width: 1.6; }
+  .edge.focus { stroke: var(--accent); stroke-width: 2.2; }
+  .edge.new { stroke-dasharray: 6 4; }
+
+  /* expand/collapse toggles */
+  .toggle { cursor: pointer; }
+  .toggle circle { fill: #fff; stroke: var(--accent); stroke-width: 1.4; transition: fill .1s; }
+  .toggle:hover circle { fill: var(--soft); }
+  .toggle text { font-size: 13px; font-weight: 700; fill: var(--accent); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+
+  /* details panel */
+  #details {
+    position: absolute; top: 10px; right: 10px; bottom: 10px; width: 268px;
+    background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(20,30,60,.12); padding: 14px 16px;
+    overflow-y: auto; display: none; font-size: 12.5px;
+  }
+  #details.open { display: block; }
+  #details .dh { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  #details .dh .accent { width: 10px; height: 10px; border-radius: 3px; }
+  #details h2 { font-size: 15px; margin: 0; font-weight: 700; }
+  #details .kind { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); margin: 0 0 8px; }
+  #details .desc { color: var(--muted); margin: 0 0 12px; line-height: 1.45; }
+  #details dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 12px; }
+  #details dt { color: var(--faint); }
+  #details dd { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; }
+  #details .sec { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); margin: 10px 0 4px; }
+  #details .cols span, #details .nbr span {
+    display: inline-block; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
+    background: var(--soft); border: 1px solid #dbe2f0; border-radius: 5px; padding: 1px 6px; margin: 0 4px 4px 0;
+  }
+  #details .close { position: absolute; top: 10px; right: 12px; cursor: pointer; color: var(--faint); font-size: 16px; line-height: 1; border: 0; background: none; }
+  #details .close:hover { color: var(--ink); }
+
+  footer { border-top: 1px solid #eef0f3; padding: 9px 16px; display: flex; align-items: center; gap: 12px; }
+  #status { font-size: 12px; color: var(--muted); }
+  #status.err { color: #b3402e; }
+  button.ghost {
+    font: inherit; font-size: 12px; color: var(--accent); background: #fff;
+    border: 1px solid #c3cede; border-radius: 7px; padding: 6px 11px; cursor: pointer;
+  }
+  button.ghost:hover { background: var(--soft); }
+  .legend { margin-left: auto; display: flex; gap: 11px; font-size: 10.5px; color: var(--muted); flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Data lineage</h1>
+    <span class="src">ui://lineage/viewer.html</span>
+    <span class="badge">MCP App · proxied through host</span>
+  </header>
+
+  <div id="stage">
+    <svg id="svg" preserveAspectRatio="xMidYMid meet" aria-label="lineage graph"></svg>
+    <aside id="details">
+      <button class="close" id="details-close" title="Close">✕</button>
+      <div id="details-body"></div>
+    </aside>
+  </div>
+
+  <footer>
+    <span id="status">Loading…</span>
+    <button class="ghost" id="reset">Reset view</button>
+    <span class="legend">
+      <span><i style="background:#5b7fa6"></i>source</span>
+      <span><i style="background:#c08a3e"></i>staging</span>
+      <span><i style="background:#4e8a5f"></i>fact</span>
+      <span><i style="background:#7d5ba6"></i>metric</span>
+      <span><i style="background:#3e8f96"></i>view</span>
+    </span>
+  </footer>
+
+  <script type="module" src="/src/lineage-app.ts"></script>
+</body>
+</html>

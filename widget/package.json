@@ -1,0 +1,21 @@
+{
+  "name": "lineage-mcp-widget",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Build for the lineage MCP App widget. Produces a single self-contained HTML that the Python server vendors and serves as the ui:// resource.",
+  "scripts": {
+    "build": "cross-env INPUT=index.html vite build",
+    "watch": "cross-env INPUT=index.html vite build --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.0",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}

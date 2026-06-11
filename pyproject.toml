@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lineage-mcp"
+version = "0.1.0"
+description = "MCP Apps reference implementation: an interactive data-lineage widget that lives inside the control plane (SEP-1865)."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Bennie Haelen" }]
+license = { text = "MIT" }
+keywords = ["mcp", "mcp-apps", "sep-1865", "lineage", "model-context-protocol"]
+
+# Only needed to run the *real* stdio MCP server (`lineage-mcp` / Claude Desktop).
+# The local browser demo (`python demo/host.py`) uses the stdlib only and needs
+# nothing from this list.
+dependencies = [
+    "mcp>=1.2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+lineage-mcp = "lineage_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+lineage_mcp = ["widgets/*.html"]

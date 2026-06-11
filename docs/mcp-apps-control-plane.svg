@@ -1,0 +1,140 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3450a3"/>
+    </marker>
+    <marker id="arr-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- background -->
+  <rect width="1600" height="900" fill="#fafbfc"/>
+
+  <!-- title -->
+  <text x="60" y="72" font-size="30" font-weight="bold" fill="#1e2430">MCP Apps: the UI lives inside the control plane</text>
+  <text x="60" y="104" font-size="16" fill="#5b6472">A tool returns an interactive widget. Every interaction the widget performs is proxied through the host as an MCP tool call.</text>
+
+  <!-- ===================== HOST BLOCK ===================== -->
+  <rect x="60" y="150" width="580" height="590" rx="14" fill="#eef2f8" stroke="#c3cede" stroke-width="1.5"/>
+  <text x="90" y="188" font-size="19" font-weight="bold" fill="#1e2430">MCP host</text>
+  <text x="232" y="188" font-size="14" fill="#5b6472">Claude · ChatGPT · VS Code · Goose</text>
+
+  <!-- conversation box -->
+  <rect x="100" y="212" width="500" height="110" rx="10" fill="#ffffff" stroke="#c3cede" stroke-width="1.2"/>
+  <text x="124" y="246" font-size="17" font-weight="bold" fill="#1e2430">Conversation</text>
+  <text x="124" y="272" font-size="13.5" fill="#5b6472">"Show me the lineage for fct_patient_visits"</text>
+  <text x="124" y="294" font-size="13.5" fill="#5b6472">Model decides to call the lineage tool</text>
+
+  <!-- iframe box (sandbox: dashed) -->
+  <rect x="100" y="362" width="500" height="340" rx="10" fill="#ffffff" stroke="#3450a3" stroke-width="1.6" stroke-dasharray="7 5"/>
+  <text x="124" y="394" font-size="17" font-weight="bold" fill="#1e2430">Sandboxed iframe</text>
+  <text x="322" y="394" font-size="13" fill="#5b6472">lineage viewer widget</text>
+  <text x="124" y="416" font-size="12.5" fill="#8a93a3">No cookies · no parent access · CSP-restricted network</text>
+
+  <!-- mini lineage graph inside iframe -->
+  <g>
+    <!-- edges -->
+    <path d="M 232 470 C 268 470, 268 522 304 522" fill="none" stroke="#b9b6af" stroke-width="1.6"/>
+    <path d="M 232 540 C 268 540, 268 522 304 522" fill="none" stroke="#3450a3" stroke-width="2.4" stroke-dasharray="6 4"/>
+    <path d="M 232 610 C 268 610, 268 552 304 552" fill="none" stroke="#b9b6af" stroke-width="1.6"/>
+    <path d="M 412 522 C 448 522, 448 500 484 500" fill="none" stroke="#3450a3" stroke-width="2.4" stroke-dasharray="6 4"/>
+    <path d="M 412 542 C 448 542, 448 590 484 590" fill="none" stroke="#b9b6af" stroke-width="1.6"/>
+    <!-- col 1: sources -->
+    <rect x="138" y="452" width="94" height="34" rx="6" fill="#ffffff" stroke="#d3d0ca"/>
+    <rect x="138" y="452" width="5" height="34" rx="2" fill="#5b7fa6"/>
+    <text x="152" y="474" font-size="12" fill="#1e2430">encounters</text>
+    <rect x="138" y="522" width="94" height="34" rx="6" fill="#ffffff" stroke="#3450a3" stroke-width="1.6"/>
+    <rect x="138" y="522" width="5" height="34" rx="2" fill="#5b7fa6"/>
+    <text x="152" y="544" font-size="12" fill="#1e2430">patients</text>
+    <rect x="138" y="592" width="94" height="34" rx="6" fill="#ffffff" stroke="#d3d0ca"/>
+    <rect x="138" y="592" width="5" height="34" rx="2" fill="#c08a3e"/>
+    <text x="152" y="614" font-size="12" fill="#1e2430">stg_charges</text>
+    <!-- col 2: focus -->
+    <rect x="304" y="504" width="108" height="44" rx="6" fill="#ffffff" stroke="#3450a3" stroke-width="2.2"/>
+    <rect x="304" y="504" width="5" height="44" rx="2" fill="#4e8a5f"/>
+    <text x="318" y="524" font-size="12" font-weight="bold" fill="#1e2430">fct_patient_</text>
+    <text x="318" y="540" font-size="12" font-weight="bold" fill="#1e2430">visits</text>
+    <!-- col 3: downstream -->
+    <rect x="484" y="482" width="94" height="34" rx="6" fill="#ffffff" stroke="#3450a3" stroke-width="1.6"/>
+    <rect x="484" y="482" width="5" height="34" rx="2" fill="#7d5ba6"/>
+    <text x="498" y="504" font-size="12" fill="#1e2430">avg_los</text>
+    <rect x="484" y="572" width="94" height="34" rx="6" fill="#ffffff" stroke="#d3d0ca"/>
+    <rect x="484" y="572" width="5" height="34" rx="2" fill="#3e8f96"/>
+    <text x="498" y="594" font-size="12" fill="#1e2430">vw_visits</text>
+  </g>
+
+  <!-- expand button inside iframe -->
+  <rect x="124" y="648" width="170" height="34" rx="7" fill="#3450a3"/>
+  <text x="209" y="670" font-size="13.5" fill="#ffffff" text-anchor="middle">Expand upstream</text>
+
+  <!-- ===================== CONTROL PLANE BAND ===================== -->
+  <rect x="718" y="150" width="84" height="590" rx="12" fill="#233659"/>
+  <text x="760" y="445" font-size="15" font-weight="bold" fill="#ffffff" letter-spacing="3" text-anchor="middle" transform="rotate(-90 760 445)">CONTROL PLANE  ·  AUTH  ·  GUARDRAILS  ·  TRACES</text>
+
+  <!-- ===================== SERVER BLOCK ===================== -->
+  <rect x="880" y="150" width="660" height="590" rx="14" fill="#f3f1ec" stroke="#d8d4cb" stroke-width="1.5"/>
+  <text x="910" y="188" font-size="19" font-weight="bold" fill="#1e2430">Your MCP server</text>
+  <text x="1110" y="188" font-size="14" fill="#5b6472">Python or TypeScript, same protocol</text>
+
+  <!-- tool: view_lineage -->
+  <rect x="920" y="212" width="580" height="76" rx="10" fill="#ffffff" stroke="#d8d4cb" stroke-width="1.2"/>
+  <text x="944" y="242" font-size="16" font-weight="bold" fill="#1e2430" font-family="DejaVu Sans Mono, monospace">view_lineage</text>
+  <text x="1110" y="242" font-size="13" fill="#5b6472">UI-enabled tool</text>
+  <text x="944" y="268" font-size="13" fill="#8a93a3" font-family="DejaVu Sans Mono, monospace">_meta.ui.resourceUri = "ui://lineage/viewer.html"</text>
+
+  <!-- tool: expand -->
+  <rect x="920" y="308" width="580" height="64" rx="10" fill="#ffffff" stroke="#d8d4cb" stroke-width="1.2"/>
+  <text x="944" y="336" font-size="16" font-weight="bold" fill="#1e2430" font-family="DejaVu Sans Mono, monospace">expand_lineage_node</text>
+  <text x="944" y="358" font-size="13" fill="#5b6472">Called by the widget, returns one more hop</text>
+
+  <!-- resource -->
+  <rect x="920" y="392" width="580" height="64" rx="10" fill="#ffffff" stroke="#d8d4cb" stroke-width="1.2"/>
+  <text x="944" y="420" font-size="16" font-weight="bold" fill="#1e2430" font-family="DejaVu Sans Mono, monospace">ui://lineage/viewer.html</text>
+  <text x="944" y="442" font-size="13" fill="#5b6472">Resource holding the widget HTML, served like any other MCP resource</text>
+
+  <!-- provider -->
+  <rect x="920" y="556" width="580" height="146" rx="10" fill="#e9ece7" stroke="#cfd5cc" stroke-width="1.2"/>
+  <text x="944" y="590" font-size="16" font-weight="bold" fill="#1e2430">Lineage provider</text>
+  <text x="944" y="616" font-size="13.5" fill="#5b6472">Neo4j knowledge graph · BigQuery / Dataplex lineage</text>
+  <text x="944" y="642" font-size="13.5" fill="#5b6472">Governance boundary: de-identification and zone</text>
+  <text x="944" y="662" font-size="13.5" fill="#5b6472">filtering happen here, before data reaches the view</text>
+
+  <!-- provider arrows -->
+  <path d="M 1140 372 L 1140 556" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#arr-ink)"/>
+  <path d="M 1280 288 L 1280 556" fill="none" stroke="#6b7280" stroke-width="1.4" marker-end="url(#arr-ink)"/>
+
+  <!-- ===================== FLOWS ===================== -->
+  <!-- 1: conversation -> view_lineage -->
+  <path d="M 600 252 L 916 252" fill="none" stroke="#3450a3" stroke-width="2.6" marker-end="url(#arr)"/>
+  <circle cx="668" cy="252" r="14" fill="#3450a3"/>
+  <text x="668" y="257" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">1</text>
+  <rect x="678" y="206" width="162" height="26" rx="13" fill="#ffffff" stroke="#3450a3" stroke-width="1.2"/><text x="759" y="223" font-size="13" fill="#3450a3" text-anchor="middle" font-weight="bold">model calls the tool</text>
+
+  <!-- 2: resource -> iframe -->
+  <path d="M 916 424 L 604 424" fill="none" stroke="#3450a3" stroke-width="2.6" marker-end="url(#arr)"/>
+  <circle cx="668" cy="424" r="14" fill="#3450a3"/>
+  <text x="668" y="429" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">2</text>
+  <rect x="616" y="378" width="286" height="26" rx="13" fill="#ffffff" stroke="#3450a3" stroke-width="1.2"/><text x="759" y="395" font-size="13" fill="#3450a3" text-anchor="middle" font-weight="bold">host fetches the UI, renders it sandboxed</text>
+
+  <!-- 3: widget button -> expand tool (proxied) -->
+  <path d="M 600 665 C 700 665, 760 480, 850 360 C 880 322, 890 340 916 340" fill="none" stroke="#3450a3" stroke-width="2.6" marker-end="url(#arr)"/>
+  <circle cx="700" cy="630" r="14" fill="#3450a3"/>
+  <text x="700" y="635" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">3</text>
+  <rect x="660" y="488" width="198" height="44" rx="13" fill="#ffffff" stroke="#3450a3" stroke-width="1.2"/><text x="759" y="506" font-size="13" fill="#3450a3" text-anchor="middle" font-weight="bold">button click, proxied by</text><text x="759" y="524" font-size="13" fill="#3450a3" text-anchor="middle" font-weight="bold">the host as a tool call</text>
+
+  <!-- blocked direct path -->
+  <path d="M 480 700 C 560 760, 760 768, 920 690" fill="none" stroke="#b3402e" stroke-width="2" stroke-dasharray="8 6"/>
+  <g transform="translate(708,762)">
+    <circle r="13" fill="#fafbfc" stroke="#b3402e" stroke-width="2"/>
+    <path d="M -6 -6 L 6 6 M 6 -6 L -6 6" stroke="#b3402e" stroke-width="2.4"/>
+  </g>
+  <text x="708" y="800" font-size="13" fill="#b3402e" text-anchor="middle" font-weight="bold">no direct network path: the sandbox has no side channel</text>
+
+  <!-- ===================== TAKEAWAY ===================== -->
+  <rect x="60" y="822" width="1480" height="54" rx="10" fill="#233659"/>
+  <text x="800" y="856" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">A button click is governed exactly like a prompt. Same auth, same guardrails, same traces.</text>
+
+  <!-- attribution -->
+  <text x="1540" y="806" font-size="12" fill="#8a93a3" text-anchor="end">MCP Apps · SEP-1865 · spec 2026-01-26 · Bennie Haelen</text>
+</svg>
