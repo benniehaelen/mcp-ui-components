@@ -181,6 +181,10 @@ TOOLS = [{
 RESOURCE_MIME_TYPE = "text/html;profile=mcp-app"
 ```
 
+For a full walkthrough of how a widget interaction reaches your Python logic and
+database — with a sequence diagram and the actual code at each hop — see
+**[docs/python-from-typescript.md](docs/python-from-typescript.md)**.
+
 ---
 
 ## Data model
