@@ -55,8 +55,12 @@ interactive control in chat.
    ```
 
 2. Add the server to VS Code's `mcp.json`
-   (`Ctrl+Shift+P → MCP: Open User Configuration`). **stdio is recommended** —
-   VS Code launches the process, no ports to manage:
+   (`Ctrl+Shift+P → MCP: Open User Configuration`). The server speaks two
+   transports — pick one.
+
+   **Option A — stdio (recommended).** VS Code launches the process itself, so
+   there are no ports to manage and no chance of connecting to a different
+   server on the same port:
 
    ```jsonc
    {
@@ -66,14 +70,37 @@ interactive control in chat.
          "args": ["-m", "lineage_mcp.server"],
          "env": { "PYTHONPATH": "C:\\src\\mcp-ui-components\\src" }
        }
-       // HTTP alternative — run `python -m lineage_mcp.server --http` first:
-       // "lineage": { "type": "http", "url": "http://localhost:3001/mcp" }
      }
    }
    ```
 
-   (After `pip install -e .` you can drop `PYTHONPATH` and use
-   `"command": "lineage-mcp"`.)
+   > Tip: if VS Code's `python` isn't the interpreter that has `mcp` installed,
+   > use that interpreter's **full path** as `command` (e.g.
+   > `C:\\Users\\you\\AppData\\Local\\Python\\...\\python.exe`). After
+   > `pip install -e .` you can instead use `"command": "lineage-mcp"` and drop
+   > `PYTHONPATH`.
+
+   **Option B — streamable HTTP.** VS Code connects to a server you run
+   yourself. Start it first in a terminal:
+
+   ```bash
+   # PowerShell
+   $env:PYTHONPATH = "C:\src\mcp-ui-components\src"
+   python -m lineage_mcp.server --http --port 3001   # serves http://127.0.0.1:3001/mcp
+   ```
+
+   then point `mcp.json` at it:
+
+   ```jsonc
+   {
+     "servers": {
+       "lineage": { "type": "http", "url": "http://localhost:3001/mcp" }
+     }
+   }
+   ```
+
+   > With HTTP, VS Code connects to **whatever owns that port** — make sure no
+   > other server is already on 3001, or you'll get its results instead.
 
 3. Start the server in VS Code (`MCP: List Servers → lineage → Start`), open
    Copilot Chat in **Agent** mode, and ask:
