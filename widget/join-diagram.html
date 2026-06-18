@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Join diagram</title>
+<style>
+  /* ---- design tokens (ported from the standalone diagram) ------------- */
+  :root {
+    --bg: #f8fafc; --surface: #ffffff; --surface-alt: #f1f5f9; --surface-subtle: #f8fafc;
+    --border: #e2e8f0; --border-strong: #cbd5e1;
+    --text: #1e293b; --text-strong: #0f172a; --text-muted: #64748b;
+    --shadow: 0 4px 20px rgba(15,23,42,0.08);
+    --key-bg: #fef3c7; --key-text: #92400e; --key-border: #fcd34d;
+    --col-bg: #f1f5f9; --col-text: #475569; --col-border: #e2e8f0;
+    --filter-bg: #fff7ed; --filter-text: #9a3412; --filter-border: #fed7aa;
+    --badge-bg: #f8fafc; --badge-border: #cbd5e1; --badge-text: #334155;
+    --mark: #fde68a; --mark-strong: #f59e0b;
+    --sql-bg: #0f172a; --sql-text: #e2e8f0;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Cascadia Mono", Menlo, Consolas, monospace;
+    --sans: var(--mcp-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0b1220; --surface: #111827; --surface-alt: #0f172a; --surface-subtle: #111827;
+    --border: #243041; --border-strong: #334155;
+    --text: #e5edf7; --text-strong: #f8fafc; --text-muted: #94a3b8;
+    --shadow: 0 10px 30px rgba(2,6,23,0.45);
+    --key-bg: #3b2f12; --key-text: #fcd34d; --key-border: #a16207;
+    --col-bg: #1f2937; --col-text: #cbd5e1; --col-border: #334155;
+    --filter-bg: #3a230f; --filter-text: #fdba74; --filter-border: #9a3412;
+    --badge-bg: #111827; --badge-border: #475569; --badge-text: #e5edf7;
+    --mark: #92400e; --mark-strong: #f59e0b; --sql-bg: #0b1220; --sql-text: #e2e8f0;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    display: flex; flex-direction: column; min-height: 520px;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+
+  /* ---- header -------------------------------------------------------- */
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 20px 12px; }
+  .h-row { display: flex; align-items: baseline; gap: 10px; }
+  .page-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-strong); letter-spacing: -.01em; }
+  .h-spacer { flex: 1; }
+  .app-badge { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+  .page-subtitle { margin: 4px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+  /* ---- toolbar ------------------------------------------------------- */
+  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 20px;
+    border-bottom: 1px solid var(--border); background: var(--surface); }
+  .toolbar .group { display: inline-flex; align-items: center; gap: 6px; }
+  .toolbar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+  .zoom-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--badge-text); font-size: 17px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0; }
+  .zoom-btn:hover { background: var(--surface-subtle); border-color: var(--border-strong); }
+  .zoom-btn:disabled { opacity: .35; cursor: not-allowed; }
+  .zoom-label { min-width: 40px; text-align: center; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+  .chip { font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 9999px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+  .chip:hover { border-color: var(--border-strong); background: var(--surface-subtle); }
+  .chip.on { background: var(--surface-alt); color: var(--text-strong); border-color: var(--border-strong); }
+  .chip.off { opacity: .55; }
+
+  /* ---- legend -------------------------------------------------------- */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 4px; }
+  .legend-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 9999px;
+    font-size: 11px; font-weight: 600; background: var(--badge-bg); border: 1px solid var(--badge-border);
+    color: var(--badge-text); cursor: pointer; overflow-wrap: anywhere; }
+  .legend-badge:hover { border-color: var(--border-strong); }
+  .legend-badge.active { box-shadow: 0 0 0 2px var(--mark-strong); }
+  .legend-badge.dim { opacity: .4; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ---- diagram stage (pan + zoom) ------------------------------------ */
+  #stage { flex: 1; min-height: 280px; position: relative; overflow: hidden; cursor: grab;
+    background-color: var(--bg);
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 24px 24px; }
+  #stage.panning { cursor: grabbing; }
+  /* Cards are positioned absolutely by the layered graph layout (layoutCards). */
+  #diagram-wrapper { position: absolute; top: 0; left: 0; transform-origin: top left; }
+  #connector-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; z-index: 0; }
+
+  .table-card { position: absolute; width: 320px; background: var(--surface); border-radius: 14px; overflow: hidden;
+    box-shadow: var(--shadow); cursor: grab; z-index: 1; border: 2px solid transparent;
+    transition: opacity .15s, box-shadow .15s; }
+  .table-card.dim { opacity: .28; }
+  .table-card.focused { box-shadow: 0 0 0 3px var(--mark-strong), var(--shadow); }
+  .table-card.dragging { cursor: grabbing; z-index: 5; transition: none;
+    box-shadow: 0 0 0 3px var(--mark-strong), var(--shadow); }
+  .card-header { padding: 13px 16px 9px; }
+  .card-table-name { font-family: var(--mono); font-size: 14px; font-weight: 700; color: #fff;
+    overflow-wrap: anywhere; margin: 0 0 2px; }
+  .card-dataset { font-family: var(--mono); font-size: 10.5px; color: rgba(255,255,255,.8);
+    margin: 0 0 6px; overflow-wrap: anywhere; }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .card-badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 10px; font-weight: 600;
+    background: rgba(255,255,255,.22); color: #fff; }
+  .card-badge.spine { background: #fffbeb; color: #92400e; border: 1px solid #f59e0b; }
+  .card-body { padding: 10px 15px 14px; }
+  .section-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); margin: 11px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border); }
+  .card-body .section-label:first-child { margin-top: 0; }
+  .col-row { display: grid; grid-template-columns: 26px 1fr; gap: 1px 8px; align-items: start; padding: 3px 0;
+    border-radius: 6px; transition: background .12s; }
+  .col-row[data-key] { cursor: pointer; }
+  .col-row.key-hl { background: color-mix(in srgb, var(--mark-strong) 26%, transparent); }
+  .col-row.dim { opacity: .3; }
+  .col-icon { grid-row: 1 / 3; align-self: start; font-size: 8.5px; font-weight: 700; border-radius: 4px;
+    padding: 2px 3px; text-align: center; line-height: 1.4; margin-top: 2px; }
+  .col-icon.key { background: var(--key-bg); color: var(--key-text); border: 1px solid var(--key-border); }
+  .col-icon.col { background: var(--col-bg); color: var(--col-text); border: 1px solid var(--col-border); }
+  .col-icon.filter { background: var(--filter-bg); color: var(--filter-text); border: 1px solid var(--filter-border); }
+  .col-name { grid-column: 2; grid-row: 1; font-family: var(--mono); font-size: 12px; color: var(--text);
+    overflow-wrap: anywhere; line-height: 1.45; }
+  .col-name.is-key { font-weight: 700; color: var(--key-text); }
+  .col-sub { grid-column: 2; grid-row: 2; font-family: var(--mono); font-size: 10px; color: var(--text-muted);
+    overflow-wrap: anywhere; line-height: 1.4; }
+  .empty-note { padding: 3px 0 6px; color: var(--text-muted); font-size: 11px; font-style: italic; }
+
+  /* section visibility toggles */
+  body[data-hide-selected] .sec-selected { display: none; }
+  body[data-hide-derived]  .sec-derived  { display: none; }
+  body[data-hide-filters]  .sec-filters  { display: none; }
+
+  /* ---- query source -------------------------------------------------- */
+  .query-source { border-top: 1px solid var(--border); background: var(--surface); padding: 14px 20px 18px; }
+  .qs-head { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); margin-bottom: 10px; }
+  details.qs { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  details.qs[open] { border-color: var(--border-strong); }
+  details.qs summary { display: flex; align-items: center; gap: 10px; padding: 11px 14px; font-size: 12.5px;
+    font-weight: 600; color: var(--badge-text); background: var(--surface-subtle); cursor: pointer;
+    user-select: none; list-style: none; }
+  details.qs summary::-webkit-details-marker { display: none; }
+  details.qs summary::before { content: '▶'; font-size: 9px; color: var(--text-muted); transition: transform .15s; }
+  details.qs[open] summary::before { transform: rotate(90deg); }
+  details.qs summary .qs-label { flex: 1; }
+  details.qs summary .qs-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 9999px;
+    background: var(--surface-alt); color: var(--text-muted); }
+  details.qs summary .copy-sql { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+  details.qs summary .copy-sql:hover { border-color: var(--border-strong); color: var(--text); }
+  .qs-body { padding: 14px; background: var(--surface); border-top: 1px solid var(--border); }
+  .qs-nl { font-size: 13.5px; line-height: 1.6; color: var(--text); font-style: italic; margin: 0; }
+  pre.sql { margin: 0; padding: 15px; background: var(--sql-bg); border-radius: 8px; overflow-x: auto;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--sql-text); white-space: pre; }
+  pre.sql mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
+  pre.sql mark.strong { background: var(--mark-strong); color: #1a1300; }
+  textarea.sql-edit { width: 100%; min-height: 220px; resize: vertical; box-sizing: border-box;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; padding: 12px; border-radius: 8px;
+    border: 1px solid var(--border-strong); background: var(--sql-bg); color: var(--sql-text); }
+  .edit-bar { display: flex; gap: 8px; margin-top: 8px; }
+
+  /* ---- footer -------------------------------------------------------- */
+  footer { border-top: 1px solid var(--border); padding: 9px 20px; display: flex; align-items: center; gap: 12px;
+    background: var(--surface); }
+  #status { font-size: 11.5px; color: var(--text-muted); flex: 1; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  #status.err { color: #b3402e; }
+
+  @media (prefers-reduced-motion: reduce) { *, .table-card, .col-row { transition: none !important; } }
+</style>
+</head>
+<body>
+  <header>
+    <div class="h-row">
+      <h1 class="page-title" id="page-title">Join diagram</h1>
+      <span class="h-spacer"></span>
+      <span class="app-badge">MCP App</span>
+    </div>
+    <p class="page-subtitle" id="page-subtitle"></p>
+  </header>
+
+  <div class="toolbar">
+    <div class="group">
+      <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
+      <span class="zoom-label" id="zoom-label">100%</span>
+      <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
+      <button class="chip" id="zoom-reset" title="Zoom to fit the whole diagram">Fit</button>
+      <button class="chip" id="reset-view" title="Restore the auto-layout, zoom and focus">Reset view</button>
+    </div>
+    <div class="sep"></div>
+    <div class="group">
+      <button class="chip on" id="t-selected" data-sec="selected">Columns</button>
+      <button class="chip on" id="t-derived" data-sec="derived">Derived</button>
+      <button class="chip on" id="t-filters" data-sec="filters">Filters</button>
+    </div>
+    <div class="sep"></div>
+    <div class="group">
+      <button class="chip" id="export-png">Export PNG</button>
+      <button class="chip" id="export-svg">Export SVG</button>
+      <button class="chip" id="theme-toggle">Dark</button>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <div id="stage">
+    <div id="diagram-wrapper">
+      <svg id="connector-svg" aria-hidden="true"></svg>
+    </div>
+  </div>
+
+  <div class="query-source">
+    <div class="qs-head">Query source</div>
+    <details class="qs" id="qs-nl">
+      <summary><span class="qs-label">Natural-language prompt</span><span class="qs-tag">NL</span></summary>
+      <div class="qs-body"><p class="qs-nl" id="nl-text"></p></div>
+    </details>
+    <details class="qs" id="qs-sql">
+      <summary><span class="qs-label">Generated SQL</span>
+        <button class="copy-sql" id="edit-sql" title="Edit &amp; re-parse">Edit</button>
+        <button class="copy-sql" id="copy-sql" title="Copy SQL">Copy</button>
+        <span class="qs-tag" id="sql-tag">SQL</span></summary>
+      <div class="qs-body"><pre class="sql" id="sql-text"></pre></div>
+    </details>
+  </div>
+
+  <footer>
+    <span id="status">Loading…</span>
+    <button class="chip" id="clear-focus" style="display:none">Clear focus</button>
+  </footer>
+
+  <script type="module" src="/src/join-diagram-app.ts"></script>
+</body>
+</html>

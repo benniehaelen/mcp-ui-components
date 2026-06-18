@@ -19,21 +19,34 @@ from __future__ import annotations
 from functools import lru_cache
 from importlib import resources
 
-from . import WIDGET_URI
+from . import JOIN_WIDGET_URI, WIDGET_URI
 from .data import FOCUS_ID
-from .provider import LineageProvider
+from .provider import JoinDiagramProvider, LineageProvider
 
 _provider = LineageProvider()
+_joins = JoinDiagramProvider()
 
 
 # ---------------------------------------------------------------------------
-# Widget resource
+# Widget resources
 # ---------------------------------------------------------------------------
 @lru_cache(maxsize=1)
 def widget_html() -> str:
     """The HTML served at ``ui://lineage/viewer.html``."""
     return (resources.files("lineage_mcp")
             .joinpath("widgets/viewer.html")
+            .read_text(encoding="utf-8"))
+
+
+def join_widget_html() -> str:
+    """The HTML served at ``ui://lineage/join-diagram.html``.
+
+    Deliberately *not* cached: the widget is re-read from disk on every call so a
+    fresh ``build:join`` shows up after re-running the tool, without restarting
+    the (long-lived stdio) server.
+    """
+    return (resources.files("lineage_mcp")
+            .joinpath("widgets/join-diagram.html")
             .read_text(encoding="utf-8"))
 
 
@@ -48,13 +61,23 @@ RESOURCES = [
         "description": "Interactive data-lineage graph. Rendered by the host "
                        "inside a sandboxed iframe.",
         "mimeType": RESOURCE_MIME_TYPE,
-    }
+    },
+    {
+        "uri": JOIN_WIDGET_URI,
+        "name": "Join diagram widget",
+        "description": "Interactive SQL join diagram: table cards, join-key "
+                       "connectors, and the source query. Rendered by the host "
+                       "inside a sandboxed iframe.",
+        "mimeType": RESOURCE_MIME_TYPE,
+    },
 ]
 
 
 def read_resource(uri: str) -> str:
     if uri == WIDGET_URI:
         return widget_html()
+    if uri == JOIN_WIDGET_URI:
+        return join_widget_html()
     raise KeyError(f"unknown resource: {uri!r}")
 
 
@@ -132,6 +155,57 @@ TOOLS = [
             "required": ["node"],
         },
     },
+    {
+        "name": "view_join_diagram",
+        "description": "Visualise the joins in a SQL query as an interactive "
+                       "diagram: one card per table (join keys, columns, "
+                       "filters) wired by join-key connectors, alongside the "
+                       "natural-language prompt and the source SQL. With no SQL "
+                       "it shows a bundled example.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sql": {
+                    "type": "string",
+                    "description": "The SQL query to diagram. Omit to render the "
+                                   "bundled monthly-encounter example.",
+                },
+                "nl": {
+                    "type": "string",
+                    "description": "Optional natural-language prompt the SQL was "
+                                   "generated from.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional title shown in the header.",
+                },
+            },
+        },
+        # SEP-1865 / MCP Apps: marks the tool UI-enabled and names its widget.
+        "_meta": {
+            "ui": {
+                "resourceUri": JOIN_WIDGET_URI,
+                "preferredSize": {"width": 900, "height": 620},
+            },
+            "ui/resourceUri": JOIN_WIDGET_URI,
+        },
+    },
+    {
+        "name": "parse_join_sql",
+        "description": "Parse a SQL query into the join-diagram model without "
+                       "(re)opening the widget. Called by the join-diagram "
+                       "widget when the user pastes or edits SQL, so the diagram "
+                       "re-renders via the same governed round-trip.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sql": {"type": "string", "description": "The SQL query to parse."},
+                "nl": {"type": "string", "description": "Optional NL prompt."},
+                "title": {"type": "string", "description": "Optional title."},
+            },
+            "required": ["sql"],
+        },
+    },
 ]
 
 
@@ -170,5 +244,25 @@ def call_tool(name: str, arguments: dict | None) -> dict:
         if not node:
             raise ValueError("describe_node requires 'node'")
         return {"structuredContent": _provider.describe(node)}
+
+    if name == "view_join_diagram":
+        model = _joins.join_diagram(
+            sql=args.get("sql"),
+            nl=args.get("nl"),
+            title=args.get("title"),
+        )
+        return {
+            "structuredContent": model,
+            "_meta": {"ui": {"resourceUri": JOIN_WIDGET_URI}},
+        }
+
+    if name == "parse_join_sql":
+        sql = args.get("sql")
+        if not sql:
+            raise ValueError("parse_join_sql requires 'sql'")
+        model = _joins.join_diagram(
+            sql=sql, nl=args.get("nl"), title=args.get("title"),
+        )
+        return {"structuredContent": model}
 
     raise KeyError(f"unknown tool: {name!r}")

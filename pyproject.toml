@@ -17,6 +17,9 @@ keywords = ["mcp", "mcp-apps", "sep-1865", "lineage", "model-context-protocol"]
 # nothing from this list.
 dependencies = [
     "mcp>=1.2.0",
+    # Parses SQL into the join-diagram model for the `view_join_diagram` widget.
+    # Pure-Python, no native deps.
+    "sqlglot>=25",
 ]
 
 [project.optional-dependencies]

@@ -6,7 +6,9 @@
   "description": "Build for the lineage MCP App widget. Produces a single self-contained HTML that the Python server vendors and serves as the ui:// resource.",
   "scripts": {
     "build": "cross-env INPUT=index.html vite build",
-    "watch": "cross-env INPUT=index.html vite build --watch"
+    "watch": "cross-env INPUT=index.html vite build --watch",
+    "build:join": "cross-env INPUT=join-diagram.html vite build",
+    "watch:join": "cross-env INPUT=join-diagram.html vite build --watch"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.0",

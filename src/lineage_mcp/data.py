@@ -192,3 +192,93 @@ NODE_DETAILS: dict[str, dict] = {
         "grain": "one row per day", "columns": ["date", "census", "admits"],
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Seed example for the join-diagram widget.
+#
+# This is the query the original hand-authored join diagram was built from. The
+# `view_join_diagram` tool parses it (via `sql_joins.parse_join_diagram`) into a
+# model when no SQL is supplied, so the widget has something to render out of the
+# box. Any other BigQuery query can be passed instead.
+# ---------------------------------------------------------------------------
+EXAMPLE_JOIN_TITLE = "monthly-encounter-provider-facility-2025"
+
+EXAMPLE_JOIN_NL = (
+    "For calendar year 2025, summarize monthly encounter counts by facility and "
+    "attending provider specialty. Include facility name, month, attending "
+    "provider name or specialty, patient gender mix, and total encounters. "
+    "Restrict the analysis to active facilities only, using encounter records "
+    "for the base population, patient records for demographics, associated party "
+    "records for the attending provider, and facility master data for facility "
+    "attributes."
+)
+
+EXAMPLE_JOIN_SQL = """WITH base_encounters AS (
+  SELECT
+    e.coid,
+    e.patient_account_num,
+    e.facility_mnemonic,
+    f.facility_name,
+    DATE_TRUNC(DATE(SAFE_CAST(e.admission_date_time AS DATETIME)), MONTH) AS encounter_month,
+    FORMAT('%s|%s', e.coid, e.patient_account_num) AS encounter_key
+  FROM `hca-hin-prod-cur-clinical.clinical_core_silver.encounter` e
+  INNER JOIN `hca-hin-prod-cur-clinical.clinical_core_silver.clinical_facility_master` f
+    ON e.coid = f.coid
+   AND e.facility_mnemonic = f.facility_mnemonic
+  WHERE e.latest_record_ind = 1
+    AND SAFE_CAST(e.admission_date_time AS DATETIME) >= DATETIME '2025-01-01 00:00:00'
+    AND SAFE_CAST(e.admission_date_time AS DATETIME) < DATETIME '2026-01-01 00:00:00'
+    AND f.load_active_ind = 1
+    AND LOWER(f.load_status) = 'active'
+),
+attending_providers AS (
+  SELECT
+    ep.coid,
+    ep.patient_account_num,
+    COALESCE(
+      NULLIF(TRIM(CONCAT(COALESCE(ep.provider_first_name, ''), ' ', COALESCE(ep.provider_last_name, ''))), ''),
+      ep.national_provider_id,
+      ep.source_provider_id
+    ) AS attending_provider_name
+  FROM `hca-hin-prod-cur-clinical.clinical_core_silver.encounter_provider` ep
+  WHERE ep.latest_record_ind = 1
+    AND REGEXP_CONTAINS(LOWER(ep.provider_role), r'attending')
+),
+patient_gender AS (
+  SELECT
+    p.coid,
+    p.patient_account_num,
+    p.patient_gender_code
+  FROM `hca-hin-prod-cur-clinical.clinical_core_silver.encounter_patient` p
+)
+SELECT
+  b.facility_name,
+  b.encounter_month AS month,
+  ap.attending_provider_name,
+  FORMAT(
+    'F %.1f%% | M %.1f%% | Other/Unknown %.1f%%',
+    100 * SAFE_DIVIDE(COUNT(DISTINCT IF(LOWER(COALESCE(pg.patient_gender_code, '')) IN ('f', 'female'), b.encounter_key, NULL)), COUNT(DISTINCT b.encounter_key)),
+    100 * SAFE_DIVIDE(COUNT(DISTINCT IF(LOWER(COALESCE(pg.patient_gender_code, '')) IN ('m', 'male'), b.encounter_key, NULL)), COUNT(DISTINCT b.encounter_key)),
+    100 * SAFE_DIVIDE(COUNT(DISTINCT IF(LOWER(COALESCE(pg.patient_gender_code, '')) NOT IN ('f', 'female', 'm', 'male'), b.encounter_key, NULL)), COUNT(DISTINCT b.encounter_key))
+  ) AS patient_gender_mix,
+  COUNT(DISTINCT b.encounter_key) AS total_encounters
+FROM base_encounters b
+INNER JOIN attending_providers ap
+  ON b.coid = ap.coid
+ AND b.patient_account_num = ap.patient_account_num
+LEFT JOIN patient_gender pg
+  ON b.coid = pg.coid
+ AND b.patient_account_num = pg.patient_account_num
+GROUP BY
+  b.facility_name,
+  month,
+  ap.attending_provider_name
+ORDER BY
+  month,
+  b.facility_name,
+  total_encounters DESC"""
+
+# Scan size comes from a BigQuery dry-run, not from the SQL itself; carried as
+# display-only metadata for the seed example.
+EXAMPLE_JOIN_SCAN = "549.2 GB"

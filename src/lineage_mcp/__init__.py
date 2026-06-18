@@ -12,3 +12,4 @@ widget and visualizes the control plane.
 __version__ = "0.1.0"
 
 WIDGET_URI = "ui://lineage/viewer.html"
+JOIN_WIDGET_URI = "ui://lineage/join-diagram.html"
