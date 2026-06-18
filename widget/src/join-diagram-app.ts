@@ -393,6 +393,31 @@ function growWrapperToContent() {
   wrapper.style.height = maxB + PAD + "px";
 }
 
+// After a drag may have pushed cards into negative space (left of / above the
+// spine), shift every card so the top-left of the arrangement sits back at PAD.
+// Pan is compensated by the same amount so nothing moves on screen — this just
+// keeps the internal origin >= 0 so fit()/export/bounds stay correct.
+function normalizeLayout() {
+  const cards = wrapper.querySelectorAll<HTMLElement>(".table-card");
+  if (!cards.length) { growWrapperToContent(); return; }
+  let minL = Infinity, minT = Infinity;
+  cards.forEach((el) => {
+    minL = Math.min(minL, parseFloat(el.style.left) || 0);
+    minT = Math.min(minT, parseFloat(el.style.top) || 0);
+  });
+  const dx = PAD - minL, dy = PAD - minT;
+  if (dx !== 0 || dy !== 0) {
+    cards.forEach((el) => {
+      el.style.left = (parseFloat(el.style.left) || 0) + dx + "px";
+      el.style.top = (parseFloat(el.style.top) || 0) + dy + "px";
+    });
+    panX -= dx * zoom;  // keep the view visually stable across the shift
+    panY -= dy * zoom;
+    applyTransform();
+  }
+  growWrapperToContent();
+}
+
 // ---- connectors (geometry ported from the standalone diagram) -------------
 let wRaw: DOMRect | null = null;
 function relCoords(el: Element) {
@@ -556,18 +581,21 @@ window.addEventListener("mousemove", (e) => {
     userArranged = true;          // stop auto-relayout from clobbering hand placement
     el.classList.add("dragging");
   }
-  // divide by zoom so the card tracks the cursor under the wrapper's scale
-  const nx = Math.max(0, cardDrag.ox + (e.clientX - cardDrag.sx) / zoom);
-  const ny = Math.max(0, cardDrag.oy + (e.clientY - cardDrag.sy) / zoom);
-  el.style.left = nx + "px";
-  el.style.top = ny + "px";
+  // divide by zoom so the card tracks the cursor under the wrapper's scale.
+  // No clamp: a card may move left/above the spine (into negative coords); the
+  // connector SVG has overflow:visible, and normalizeLayout() retidies on drop.
+  el.style.left = cardDrag.ox + (e.clientX - cardDrag.sx) / zoom + "px";
+  el.style.top = cardDrag.oy + (e.clientY - cardDrag.sy) / zoom + "px";
   growWrapperToContent();
   drawConnectors();
 });
 window.addEventListener("mouseup", () => {
   if (!cardDrag) return;
   document.getElementById(cardDrag.id)?.classList.remove("dragging");
-  if (cardDrag.moved) suppressCardClick = true;  // swallow the click that trails a drag
+  if (cardDrag.moved) {
+    suppressCardClick = true;  // swallow the click that trails a drag
+    normalizeLayout();         // retidy if the card was pushed past the origin
+  }
   cardDrag = null;
 });
 stage.addEventListener("click", (e) => {
