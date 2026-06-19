@@ -754,17 +754,36 @@ function diagramHtml(): string {
 }
 function showAsHtml() {
   if (!model) return;
-  let html: string;
-  try { html = diagramHtml(); } catch { setStatus("Show as HTML failed", true); return; }
-  try {
-    download("data:text/html;charset=utf-8," + encodeURIComponent(html),
-      `${model.title || "join-diagram"}.html`);
-    setStatus("Exported standalone HTML");
-  } catch {
-    navigator.clipboard.writeText(html)
-      .then(() => setStatus("Download blocked — HTML copied to clipboard instead"))
-      .catch(() => setStatus("Show as HTML blocked by the host", true));
-  }
+  const html = diagramHtml();
+  // Sandboxed MCP hosts usually block file downloads, so the reliable path is to
+  // reveal the HTML inline (you can see/select it) and copy it to the clipboard.
+  (document.getElementById("qs-sql") as HTMLDetailsElement).open = true;
+  const body = sqlEl.parentElement!;
+  body.querySelector(".html-panel")?.remove();
+  sqlEl.style.display = "none";
+  const panel = document.createElement("div");
+  panel.className = "html-panel";
+  const ta = document.createElement("textarea");
+  ta.className = "sql-edit"; ta.value = html; ta.readOnly = true; ta.spellcheck = false;
+  const bar = document.createElement("div"); bar.className = "edit-bar";
+  const copy = document.createElement("button"); copy.className = "chip on"; copy.textContent = "Copy HTML";
+  const dl = document.createElement("button"); dl.className = "chip"; dl.textContent = "Download .html";
+  const close = document.createElement("button"); close.className = "chip"; close.textContent = "Close";
+  bar.append(copy, dl, close);
+  panel.append(ta, bar); body.appendChild(panel);
+  const doCopy = () => navigator.clipboard.writeText(html)
+    .then(() => setStatus("Standalone HTML copied to clipboard — paste it into a .html file"))
+    .catch(() => setStatus("Clipboard blocked by the host — select the text and copy manually", true));
+  copy.addEventListener("click", doCopy);
+  dl.addEventListener("click", () => {
+    try {
+      download("data:text/html;charset=utf-8," + encodeURIComponent(html), `${model!.title || "join-diagram"}.html`);
+      setStatus("Download started (if your host permits downloads)");
+    } catch { setStatus("Download blocked by the host — use Copy HTML instead", true); }
+  });
+  close.addEventListener("click", () => { panel.remove(); sqlEl.style.display = ""; });
+  ta.focus(); ta.select();
+  doCopy();
 }
 $("show-html").addEventListener("click", showAsHtml);
 $("export-svg").addEventListener("click", () => {
