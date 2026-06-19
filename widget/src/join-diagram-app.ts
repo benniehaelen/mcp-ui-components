@@ -709,6 +709,64 @@ function download(href: string, name: string) {
   const a = document.createElement("a");
   a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove();
 }
+
+// A self-contained HTML snapshot: the diagram markup + the full stylesheet +
+// the baked theme variables + the source SQL. Static (no MCP interactivity), so
+// it opens in any browser for viewing / sharing / embedding.
+function diagramHtml(): string {
+  const w = Math.ceil(wrapper.scrollWidth), h = Math.ceil(wrapper.scrollHeight);
+  const cs = getComputedStyle(document.documentElement);
+  const vars = EXPORT_VARS.map((v) => `${v}:${cs.getPropertyValue(v)}`).join(";");
+  const styleText = document.querySelector("style")!.textContent || "";
+  const theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  const clone = wrapper.cloneNode(true) as HTMLElement;
+  clone.removeAttribute("id");
+  clone.style.position = "relative";
+  clone.style.transform = "none";
+  clone.style.width = `${w}px`;
+  clone.style.height = `${h}px`;
+  const title = escapeHtml(model?.title || "Join diagram");
+  const nl = model?.nl ? `<p class="x-nl">${escapeHtml(model.nl)}</p>` : "";
+  const sql = escapeHtml(model?.sql || "");
+  return `<!DOCTYPE html>
+<html lang="en" data-theme="${theme}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>${styleText}
+  body { margin:0; padding:24px; ${vars}; background:var(--bg); color:var(--text); font-family:var(--sans); }
+  .x-title { font-size:18px; font-weight:700; margin:0 0 6px; color:var(--text-strong); }
+  .x-nl { font-style:italic; max-width:900px; color:var(--text-muted); margin:0 0 16px; }
+  .x-stage { position:relative; overflow:auto; }
+  .x-sql { margin-top:24px; }
+  .x-sql pre { margin:0; background:var(--sql-bg); color:var(--sql-text); padding:15px; border-radius:8px;
+    overflow-x:auto; font-family:var(--mono); font-size:11.5px; line-height:1.6; white-space:pre; }
+</style>
+</head>
+<body>
+  <h1 class="x-title">${title}</h1>
+  ${nl}
+  <div class="x-stage">${clone.outerHTML}</div>
+  <div class="x-sql"><pre>${sql}</pre></div>
+</body>
+</html>`;
+}
+function showAsHtml() {
+  if (!model) return;
+  let html: string;
+  try { html = diagramHtml(); } catch { setStatus("Show as HTML failed", true); return; }
+  try {
+    download("data:text/html;charset=utf-8," + encodeURIComponent(html),
+      `${model.title || "join-diagram"}.html`);
+    setStatus("Exported standalone HTML");
+  } catch {
+    navigator.clipboard.writeText(html)
+      .then(() => setStatus("Download blocked — HTML copied to clipboard instead"))
+      .catch(() => setStatus("Show as HTML blocked by the host", true));
+  }
+}
+$("show-html").addEventListener("click", showAsHtml);
 $("export-svg").addEventListener("click", () => {
   try {
     const { svg: s } = diagramSvg();
