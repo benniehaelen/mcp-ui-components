@@ -67,6 +67,10 @@
   .chip:hover { border-color: var(--border-strong); background: var(--surface-subtle); }
   .chip.on { background: var(--surface-alt); color: var(--text-strong); border-color: var(--border-strong); }
   .chip.off { opacity: .55; }
+  /* Image export downloads only work outside the host sandbox, so the PNG/SVG
+     buttons appear only in the standalone HTML export (opened in a browser). */
+  #export-png, #export-svg { display: none; }
+  body[data-standalone] #export-png, body[data-standalone] #export-svg { display: inline-flex; }
 
   /* ---- legend -------------------------------------------------------- */
   .legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 4px; }
@@ -197,7 +201,6 @@
     <div class="group">
       <button class="chip" id="export-png">Export PNG</button>
       <button class="chip" id="export-svg">Export SVG</button>
-      <button class="chip" id="show-html" title="Download a self-contained HTML snapshot">HTML</button>
       <button class="chip" id="theme-toggle">Dark</button>
     </div>
   </div>

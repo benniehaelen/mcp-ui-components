@@ -16,6 +16,10 @@ and renders it sandboxed.
 
 from __future__ import annotations
 
+import json
+import os
+import re
+import tempfile
 from functools import lru_cache
 from importlib import resources
 
@@ -26,6 +30,34 @@ from .provider import JoinDiagramProvider, LineageProvider, QueryPlanProvider
 _provider = LineageProvider()
 _joins = JoinDiagramProvider()
 _plans = QueryPlanProvider()
+
+
+def _write_standalone_html(widget_html: str, model: dict, title: str) -> dict:
+    """Write a self-contained, *interactive* HTML copy of a widget to disk.
+
+    The vendored single-file widget bundle is reused verbatim, with the parsed
+    model injected as ``window.__MCP_MODEL__``. Opened in a browser (outside the
+    host sandbox) the bundle renders the model directly — no MCP host needed —
+    and its Export PNG/SVG buttons work there. Returns the file path; the host
+    agent surfaces it (no megabyte payload echoed into the chat).
+    """
+    payload = json.dumps(model).replace("</", "<\\/")  # keep </script> out of the inline JSON
+    inject = f"<script>window.__MCP_MODEL__ = {payload};</script>\n</head>"
+    html = widget_html.replace("</head>", inject, 1)
+    name = (re.sub(r"[^A-Za-z0-9._-]+", "-", title or "diagram").strip("-") or "diagram")
+    path = os.path.join(tempfile.gettempdir(), f"{name}.html")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html)
+    return {
+        "structuredContent": {
+            "path": path,
+            "filename": f"{name}.html",
+            "bytes": len(html),
+            "note": "Self-contained interactive HTML written to disk. Open it in a "
+                    "browser to view; use its Export PNG / Export SVG buttons or "
+                    "Print there. Ask to move it into your workspace if you like.",
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +315,38 @@ TOOLS = [
             "required": ["sql"],
         },
     },
+    {
+        "name": "export_join_diagram",
+        "description": "Export the join diagram as a self-contained, INTERACTIVE "
+                       "HTML file written to disk. Open it in any browser (outside "
+                       "the host sandbox) to view, drag, zoom, and use its Export "
+                       "PNG/SVG/Print options. Returns the file path. With no SQL "
+                       "it exports the bundled example.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sql": {"type": "string", "description": "The SQL query to diagram."},
+                "nl": {"type": "string", "description": "Optional NL prompt."},
+                "title": {"type": "string", "description": "Optional title / filename."},
+            },
+        },
+    },
+    {
+        "name": "export_query_plan",
+        "description": "Export the query plan (logical execution pipeline) as a "
+                       "self-contained, INTERACTIVE HTML file written to disk. Open "
+                       "it in any browser (outside the host sandbox) to view and "
+                       "use its Export PNG/SVG/Print options. Returns the file "
+                       "path. With no SQL it exports the bundled example.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sql": {"type": "string", "description": "The SQL query to diagram."},
+                "nl": {"type": "string", "description": "Optional NL prompt."},
+                "title": {"type": "string", "description": "Optional title / filename."},
+            },
+        },
+    },
 ]
 
 
@@ -361,5 +425,23 @@ def call_tool(name: str, arguments: dict | None) -> dict:
             sql=sql, nl=args.get("nl"), title=args.get("title"),
         )
         return {"structuredContent": model}
+
+    if name == "export_join_diagram":
+        model = _joins.join_diagram(
+            sql=args.get("sql"), nl=args.get("nl"), title=args.get("title"),
+        )
+        return _write_standalone_html(
+            join_widget_html(), model,
+            args.get("title") or model.get("title") or "join-diagram",
+        )
+
+    if name == "export_query_plan":
+        model = _plans.query_plan(
+            sql=args.get("sql"), nl=args.get("nl"), title=args.get("title"),
+        )
+        return _write_standalone_html(
+            query_plan_html(), model,
+            args.get("title") or model.get("title") or "query-plan",
+        )
 
     raise KeyError(f"unknown tool: {name!r}")

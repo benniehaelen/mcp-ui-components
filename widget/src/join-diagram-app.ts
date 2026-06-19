@@ -709,83 +709,6 @@ function download(href: string, name: string) {
   const a = document.createElement("a");
   a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove();
 }
-
-// A self-contained HTML snapshot: the diagram markup + the full stylesheet +
-// the baked theme variables + the source SQL. Static (no MCP interactivity), so
-// it opens in any browser for viewing / sharing / embedding.
-function diagramHtml(): string {
-  const w = Math.ceil(wrapper.scrollWidth), h = Math.ceil(wrapper.scrollHeight);
-  const cs = getComputedStyle(document.documentElement);
-  const vars = EXPORT_VARS.map((v) => `${v}:${cs.getPropertyValue(v)}`).join(";");
-  const styleText = document.querySelector("style")!.textContent || "";
-  const theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-  const clone = wrapper.cloneNode(true) as HTMLElement;
-  clone.removeAttribute("id");
-  clone.style.position = "relative";
-  clone.style.transform = "none";
-  clone.style.width = `${w}px`;
-  clone.style.height = `${h}px`;
-  const title = escapeHtml(model?.title || "Join diagram");
-  const nl = model?.nl ? `<p class="x-nl">${escapeHtml(model.nl)}</p>` : "";
-  const sql = escapeHtml(model?.sql || "");
-  return `<!DOCTYPE html>
-<html lang="en" data-theme="${theme}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title}</title>
-<style>${styleText}
-  body { margin:0; padding:24px; ${vars}; background:var(--bg); color:var(--text); font-family:var(--sans); }
-  .x-title { font-size:18px; font-weight:700; margin:0 0 6px; color:var(--text-strong); }
-  .x-nl { font-style:italic; max-width:900px; color:var(--text-muted); margin:0 0 16px; }
-  .x-stage { position:relative; overflow:auto; }
-  .x-sql { margin-top:24px; }
-  .x-sql pre { margin:0; background:var(--sql-bg); color:var(--sql-text); padding:15px; border-radius:8px;
-    overflow-x:auto; font-family:var(--mono); font-size:11.5px; line-height:1.6; white-space:pre; }
-</style>
-</head>
-<body>
-  <h1 class="x-title">${title}</h1>
-  ${nl}
-  <div class="x-stage">${clone.outerHTML}</div>
-  <div class="x-sql"><pre>${sql}</pre></div>
-</body>
-</html>`;
-}
-function showAsHtml() {
-  if (!model) return;
-  const html = diagramHtml();
-  // Sandboxed MCP hosts usually block file downloads, so the reliable path is to
-  // reveal the HTML inline (you can see/select it) and copy it to the clipboard.
-  (document.getElementById("qs-sql") as HTMLDetailsElement).open = true;
-  const body = sqlEl.parentElement!;
-  body.querySelector(".html-panel")?.remove();
-  sqlEl.style.display = "none";
-  const panel = document.createElement("div");
-  panel.className = "html-panel";
-  const ta = document.createElement("textarea");
-  ta.className = "sql-edit"; ta.value = html; ta.readOnly = true; ta.spellcheck = false;
-  const bar = document.createElement("div"); bar.className = "edit-bar";
-  const copy = document.createElement("button"); copy.className = "chip on"; copy.textContent = "Copy HTML";
-  const dl = document.createElement("button"); dl.className = "chip"; dl.textContent = "Download .html";
-  const close = document.createElement("button"); close.className = "chip"; close.textContent = "Close";
-  bar.append(copy, dl, close);
-  panel.append(ta, bar); body.appendChild(panel);
-  const doCopy = () => navigator.clipboard.writeText(html)
-    .then(() => setStatus("Standalone HTML copied to clipboard — paste it into a .html file"))
-    .catch(() => setStatus("Clipboard blocked by the host — select the text and copy manually", true));
-  copy.addEventListener("click", doCopy);
-  dl.addEventListener("click", () => {
-    try {
-      download("data:text/html;charset=utf-8," + encodeURIComponent(html), `${model!.title || "join-diagram"}.html`);
-      setStatus("Download started (if your host permits downloads)");
-    } catch { setStatus("Download blocked by the host — use Copy HTML instead", true); }
-  });
-  close.addEventListener("click", () => { panel.remove(); sqlEl.style.display = ""; });
-  ta.focus(); ta.select();
-  doCopy();
-}
-$("show-html").addEventListener("click", showAsHtml);
 $("export-svg").addEventListener("click", () => {
   try {
     const { svg: s } = diagramSvg();
@@ -834,8 +757,19 @@ app.onerror = (e: any) => console.error(e);
 
 window.addEventListener("resize", () => { if (model) drawConnectors(); });
 
-app.connect().then(() => {
-  const ctx = app.getHostContext();
-  if (ctx) applyHostContext(ctx);
-  if (!model) setStatus("Connected — awaiting query…");
-});
+// Standalone mode: the `export_join_diagram` tool writes a copy of this bundle
+// with the model injected as `window.__MCP_MODEL__`. When present we render it
+// directly (no host) and reveal the export buttons, which work in a real browser
+// tab. Otherwise we connect to the MCP host as usual.
+const injected = (window as any).__MCP_MODEL__ as Model | undefined;
+if (injected && injected.tables) {
+  document.body.dataset.standalone = "1";
+  render(injected);
+  setStatus("Standalone export — Edit SQL needs the live server, but export works here");
+} else {
+  app.connect().then(() => {
+    const ctx = app.getHostContext();
+    if (ctx) applyHostContext(ctx);
+    if (!model) setStatus("Connected — awaiting query…");
+  });
+}
