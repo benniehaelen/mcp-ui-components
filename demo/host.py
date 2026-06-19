@@ -1,17 +1,17 @@
-"""Local offline demo — render the lineage widget in a real MCP Apps host.
+"""Local offline demo — render the MCP UI components in a real MCP Apps host.
 
-This launches three things and wires them together so you can see the widget as
-an interactive control, exactly as it appears in VS Code Copilot Chat:
+This launches three things and wires them together so you can see the widgets as
+interactive controls, exactly as they appear in VS Code Copilot Chat:
 
-  1. the lineage MCP server (streamable HTTP, port 8770)   ← our code
-  2. the MCP Apps reference host UI       (port 8080)       ← vendored, MIT
-  3. the sandbox proxy on a second origin (port 8081)       ← vendored, MIT
+  1. the mcp-ui-components server (streamable HTTP, port 8770)  ← our code
+  2. the MCP Apps reference host UI       (port 8080)            ← vendored, MIT
+  3. the sandbox proxy on a second origin (port 8081)            ← vendored, MIT
 
 The reference host (modelcontextprotocol/ext-apps `basic-host`) speaks the same
 protocol VS Code uses, so this demo is a faithful preview. The host connects to
-our server, calls `view_lineage`, renders the returned `ui://lineage/viewer.html`
-widget inside the sandbox, and proxies the widget's "Expand upstream" click back
-as an `expand_lineage_node` tool call.
+our server, calls `view_lineage`, renders the returned
+`ui://mcp-ui-components/viewer.html` widget inside the sandbox, and proxies the
+widget's "Expand upstream" click back as an `expand_lineage_node` tool call.
 
     python demo/host.py        # then open http://localhost:8080
 
@@ -121,7 +121,7 @@ def main() -> None:
     # 1) Launch our MCP server (HTTP) as a child process.
     env_path = str(ROOT / "src")
     proc = subprocess.Popen(
-        [sys.executable, "-m", "lineage_mcp.server", "--http", "--port", str(MCP_PORT)],
+        [sys.executable, "-m", "mcp_ui_components.server", "--http", "--port", str(MCP_PORT)],
         cwd=str(ROOT),
         env={**_env(), "PYTHONPATH": env_path},
     )
@@ -130,8 +130,8 @@ def main() -> None:
     threading.Thread(target=partial(_serve, HostHandler, HOST_PORT), daemon=True).start()
     threading.Thread(target=partial(_serve, SandboxHandler, SANDBOX_PORT), daemon=True).start()
 
-    print("\n  Lineage MCP Apps — offline demo")
-    print("  ==============================")
+    print("\n  MCP UI Components — offline demo")
+    print("  ===============================")
     print(f"  MCP server : {MCP_URL}")
     print(f"  Host UI    : http://localhost:{HOST_PORT}")
     print(f"  Sandbox    : http://localhost:{SANDBOX_PORT} (separate origin)")

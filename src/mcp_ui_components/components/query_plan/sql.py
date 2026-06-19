@@ -1,6 +1,6 @@
 """Parse SQL into a *query-plan model* — a logical execution pipeline.
 
-Where :mod:`sql_joins` extracts only the join graph, this module decomposes an
+Where the join-diagram parser extracts only the join graph, this module decomposes an
 *entire* SQL statement into the operators an experienced SQL user reasons about,
 laid out in the order the query logically executes:
 
@@ -14,7 +14,7 @@ a lane that another lane reads from is wired to the consuming operator with a
 Backed by ``sqlglot`` (pure-Python, multi-dialect). The model is JSON-serialisable
 and flows unchanged through the MCP tool result out to the ``query-plan`` widget.
 
-Reuses the small AST helpers from :mod:`sql_joins` (``_from_node``, ``_split_and``,
+Reuses the small AST helpers from :mod:`...shared.sql` (``_from_node``, ``_split_and``,
 ``_join_type``, ``_strip_aliases``, ``_dedup_append``, ``_PALETTE``) so the two
 parsers stay consistent. Constructs it cannot model (recursive CTEs, exotic FROM
 sources) degrade to partial operators rather than raising.
@@ -28,7 +28,7 @@ from collections import Counter
 import sqlglot
 from sqlglot import exp
 
-from .sql_joins import (
+from ...shared.sql import (
     _PALETTE,
     _dedup_append,
     _from_node,

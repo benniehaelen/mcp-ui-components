@@ -2,10 +2,10 @@
 
 import pytest
 
-from lineage_mcp import JOIN_WIDGET_URI, tools
-from lineage_mcp.data import EXAMPLE_JOIN_SQL
-from lineage_mcp.provider import JoinDiagramProvider
-from lineage_mcp.sql_joins import parse_join_diagram
+from mcp_ui_components import JOIN_WIDGET_URI, registry as tools
+from mcp_ui_components.shared.examples import EXAMPLE_JOIN_SQL
+from mcp_ui_components.components.join_diagram.provider import JoinDiagramProvider
+from mcp_ui_components.components.join_diagram.sql import parse_join_diagram
 
 
 @pytest.fixture(scope="module")

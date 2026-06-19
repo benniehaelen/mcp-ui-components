@@ -1,8 +1,8 @@
 """Tests for the lineage provider and tool dispatch."""
 
-from lineage_mcp import WIDGET_URI, tools
-from lineage_mcp.data import FOCUS_ID
-from lineage_mcp.provider import LineageProvider
+from mcp_ui_components import WIDGET_URI, registry as tools
+from mcp_ui_components.components.lineage.data import FOCUS_ID
+from mcp_ui_components.components.lineage.provider import LineageProvider
 
 
 def test_initial_view_has_one_hop_each_direction():

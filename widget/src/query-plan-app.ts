@@ -2,7 +2,7 @@
  * Query plan — an interactive MCP App widget.
  *
  * Renders the *query-plan model* produced by the `view_query_plan` tool
- * (see src/lineage_mcp/sql_query.py): a logical execution pipeline where every
+ * (see src/mcp_ui_components/components/query_plan/sql.py): a logical execution pipeline where every
  * SQL clause is an operator box, laid out left→right in the order SQL runs, with
  * each CTE / subquery / set-op arm as its own lane that feeds downstream
  * operators via cross-lane dataflow edges.
@@ -52,11 +52,32 @@ const TYPE_COLOR: Record<string, string> = {
   sort: "#ec4899", limit: "#64748b", setop: "#f43f5e",
 };
 
+// a small line glyph per operator type (16×16, stroke = currentColor) so the
+// pipeline reads graphically, not just by colour.
+const TYPE_ICON: Record<string, string> = {
+  scan: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M2.5 6.5h11M2.5 9.5h11"/>',
+  join: '<circle cx="6" cy="8" r="3.6"/><circle cx="10" cy="8" r="3.6"/>',
+  filter: '<path d="M3 4h10l-3.8 4.6V13l-2.4-1.3V8.6z"/>',
+  aggregate: '<path d="M11.5 4h-7l3.4 4-3.4 4h7"/>',
+  having: '<path d="M3 4h10l-3.8 4.6V13l-2.4-1.3V8.6z"/><path d="M11 12.5l1 1 2-2.2"/>',
+  window: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M8 3.5v9M2.5 8h11"/>',
+  project: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M6 3.5v9M10 3.5v9"/>',
+  distinct: '<path d="M12.5 5.2a5 5 0 1 0 1 3.3"/><path d="M5.6 8l1.9 1.9 4-4.4"/>',
+  sort: '<path d="M3 5h7M3 8h5M3 11h3"/><path d="M12 4.5v7M10.5 10l1.5 1.6 1.5-1.6"/>',
+  limit: '<path d="M6.2 3 5 13M11 3l-1.2 10M3.4 6.5h9.2M3 9.5h9.2"/>',
+  setop: '<path d="M4 5v4a4 4 0 0 0 8 0V5"/>',
+};
+function opIcon(type: string): string {
+  const inner = TYPE_ICON[type] || '<circle cx="8" cy="8" r="4"/>';
+  return `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" ` +
+    `stroke-linecap="round" stroke-linejoin="round" width="15" height="15">${inner}</svg>`;
+}
+
 // layout geometry (OP_W must match .op-box width in the CSS)
-const OP_W = 212;
-const OP_GAP = 64;          // horizontal gap between operators in a lane
-const LANE_HEADER_W = 168;  // width reserved for the lane header column
-const LANE_GAP = 46;        // vertical gap between lanes
+const OP_W = 232;
+const OP_GAP = 58;          // horizontal gap between operators in a lane
+const LANE_HEADER_W = 176;  // width reserved for the lane header column
+const LANE_GAP = 64;        // vertical gap between lanes
 const PAD = 40;
 const MIN_ZOOM = 0.25;
 
@@ -69,6 +90,7 @@ const legendEl = $("legend");
 const sqlEl = $("sql-text");
 const statusEl = $("status");
 const clearFocusBtn = $("clear-focus");
+const tooltipEl = $("op-tooltip");
 
 let model: Model | null = null;
 let zoom = 1, panX = 0, panY = 0;
@@ -170,12 +192,40 @@ function buildLaneHeader(b: Block): HTMLElement {
   return head;
 }
 
+// ---- hover tooltip (full, untruncated operator detail) --------------------
+function showTooltip(op: Operator, boxEl: HTMLElement) {
+  const lines = op.detail.length
+    ? op.detail.map((d) => `<div class="tt-line">${escapeHtml(d)}</div>`).join("")
+    : `<div class="tt-line tt-empty">no details</div>`;
+  const badge = op.badge ? `<span class="tt-badge">${escapeHtml(op.badge)}</span>` : "";
+  const src = op.sourceRef ? `<div class="tt-src">◀ from ${escapeHtml(op.sourceRef)}</div>` : "";
+  tooltipEl.innerHTML =
+    `<div class="tt-head"><span class="tt-icon" style="color:${TYPE_COLOR[op.type] || "#64748b"}">` +
+    `${opIcon(op.type)}</span><span class="tt-title">${escapeHtml(op.title)}</span>${badge}</div>` +
+    lines + src;
+  tooltipEl.style.display = "block";
+  // position near the card, clamped to the stage
+  const sr = stage.getBoundingClientRect();
+  const br = boxEl.getBoundingClientRect();
+  const tw = tooltipEl.offsetWidth, th = tooltipEl.offsetHeight;
+  let left = br.left - sr.left;
+  let top = br.bottom - sr.top + 8;
+  if (top + th > sr.height - 4) top = br.top - sr.top - th - 8;  // flip above if no room below
+  left = Math.max(6, Math.min(left, sr.width - tw - 6));
+  top = Math.max(6, top);
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.top = `${top}px`;
+}
+function hideTooltip() { tooltipEl.style.display = "none"; }
+
 function buildOp(op: Operator, b: Block): HTMLElement {
   const boxEl = document.createElement("div");
   boxEl.className = "op-box";
   boxEl.id = op.id;
   boxEl.dataset.block = b.id;
   const color = TYPE_COLOR[op.type] || "#64748b";
+
+  boxEl.style.setProperty("--accent", color);
 
   const lines = op.detail.length
     ? op.detail.map((d) => `<div class="op-line">${escapeHtml(d)}</div>`).join("")
@@ -184,15 +234,16 @@ function buildOp(op: Operator, b: Block): HTMLElement {
   const badge = op.badge ? `<span class="op-badge">${escapeHtml(op.badge)}</span>` : "";
 
   boxEl.innerHTML = `
-    <div class="op-head" style="background:${color}">
+    <div class="op-head">
+      <span class="op-icon" style="color:${color}">${opIcon(op.type)}</span>
       <span class="op-type">${escapeHtml(op.type)}</span>
       <span class="op-title">${escapeHtml(op.title)}</span>
       ${badge}
     </div>
     <div class="op-body">${lines}${src}</div>`;
 
-  boxEl.addEventListener("mouseenter", () => { if (!focusOp) highlightForOp(op); });
-  boxEl.addEventListener("mouseleave", () => { if (!focusOp) clearHighlight(); });
+  boxEl.addEventListener("mouseenter", () => { if (!focusOp) highlightForOp(op); showTooltip(op, boxEl); });
+  boxEl.addEventListener("mouseleave", () => { if (!focusOp) clearHighlight(); hideTooltip(); });
   boxEl.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -308,11 +359,11 @@ function drawConnectors() {
       const ops = `${b.operators[k].id} ${b.operators[k + 1].id}`;
       const path = elNS("path", {
         d: `M${sx},${sy} C${sx + bow},${sy} ${ex - bow},${ey} ${ex},${ey}`,
-        stroke: "var(--text-muted)", "stroke-width": 1.6, fill: "none", "stroke-linecap": "round",
+        stroke: "var(--flow-line)", "stroke-width": 1.5, fill: "none", "stroke-linecap": "round",
       });
       (path as any).dataset.ops = ops;
       svg.appendChild(path);
-      arrowHead(ex + 6, ey, "right", "var(--text-muted)", ops);
+      arrowHead(ex + 6, ey, "right", "var(--flow-line)", ops);
     }
   }
 
@@ -332,7 +383,8 @@ function drawConnectors() {
     const ops = `${prod.operators[prod.operators.length - 1]?.id || prod.id} ${e.toOp}`;
     const path = elNS("path", {
       d: `M${sx},${sy} C${sx},${my} ${tx},${my} ${tx},${ty}`,
-      stroke: e.color, "stroke-width": 2.5, fill: "none", "stroke-linecap": "round",
+      stroke: e.color, "stroke-width": 1.8, fill: "none", "stroke-linecap": "round",
+      "stroke-opacity": 0.85,
     });
     (path as any).dataset.ops = ops;
     svg.appendChild(path);
@@ -341,16 +393,16 @@ function drawConnectors() {
     // label pill at the midpoint
     const txt = e.label;
     if (txt) {
-      const bw = Math.max(70, txt.length * 6.2), bh = 19;
+      const bw = Math.max(64, txt.length * 5.8), bh = 17;
       const pill = elNS("rect", {
-        x: tx - bw / 2, y: my - bh / 2, width: bw, height: bh, rx: 9,
-        fill: "var(--surface)", stroke: e.color, "stroke-width": 1.4,
+        x: tx - bw / 2, y: my - bh / 2, width: bw, height: bh, rx: 8.5,
+        fill: "var(--surface)", stroke: e.color, "stroke-width": 1.1, "stroke-opacity": 0.7,
       });
       (pill as any).dataset.ops = ops;
       svg.appendChild(pill);
       const label = elNS("text", {
-        x: tx, y: my + 3.5, "text-anchor": "middle", "font-family": "var(--sans)",
-        "font-size": 9.5, "font-weight": 700, fill: e.color,
+        x: tx, y: my + 3.2, "text-anchor": "middle", "font-family": "var(--sans)",
+        "font-size": 9, "font-weight": 700, fill: e.color,
       });
       label.textContent = txt;
       (label as any).dataset.ops = ops;
@@ -465,7 +517,9 @@ function fit() {
   const sw = stage.clientWidth, sh = stage.clientHeight;
   const ww = wrapper.scrollWidth, wh = wrapper.scrollHeight;
   const z = Math.min(1, (sw - 24) / ww, (sh - 24) / wh);
-  zoom = Math.max(MIN_ZOOM, z || 1);
+  // Fit may zoom out below the manual MIN_ZOOM floor so a tall plan is fully
+  // framed rather than clipped at the bottom.
+  zoom = Math.max(0.05, z || 1);
   panX = Math.max(0, (sw - ww * zoom) / 2);
   panY = Math.max(0, (sh - wh * zoom) / 2);
   $("zoom-label").textContent = Math.round(zoom * 100) + "%";
@@ -508,7 +562,7 @@ window.addEventListener("mousemove", (e) => {
   if (!opDrag.moved && Math.hypot(e.clientX - opDrag.sx, e.clientY - opDrag.sy) < 4) return;
   const el = document.getElementById(opDrag.id);
   if (!el) return;
-  if (!opDrag.moved) { opDrag.moved = true; userArranged = true; el.classList.add("dragging"); }
+  if (!opDrag.moved) { opDrag.moved = true; userArranged = true; el.classList.add("dragging"); hideTooltip(); }
   el.style.left = Math.max(0, opDrag.ox + (e.clientX - opDrag.sx) / zoom) + "px";
   el.style.top = Math.max(0, opDrag.oy + (e.clientY - opDrag.sy) / zoom) + "px";
   growWrapperToContent();

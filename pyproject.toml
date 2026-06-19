@@ -3,21 +3,21 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lineage-mcp"
+name = "mcp-ui-components"
 version = "0.1.0"
-description = "MCP Apps reference implementation: an interactive data-lineage widget that lives inside the control plane (SEP-1865)."
+description = "MCP Apps reference implementation: interactive UI controls (lineage viewer, SQL join diagram, query plan) that live inside the control plane (SEP-1865)."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Bennie Haelen" }]
 license = { text = "MIT" }
-keywords = ["mcp", "mcp-apps", "sep-1865", "lineage", "model-context-protocol"]
+keywords = ["mcp", "mcp-apps", "sep-1865", "mcp-ui-components", "lineage", "model-context-protocol"]
 
-# Only needed to run the *real* stdio MCP server (`lineage-mcp` / Claude Desktop).
+# Only needed to run the *real* MCP server (`mcp-ui-components` / Claude Desktop).
 # The local browser demo (`python demo/host.py`) uses the stdlib only and needs
 # nothing from this list.
 dependencies = [
     "mcp>=1.2.0",
-    # Parses SQL into the join-diagram model for the `view_join_diagram` widget.
+    # Parses SQL into the join-diagram / query-plan models for the SQL controls.
     # Pure-Python, no native deps.
     "sqlglot>=25",
 ]
@@ -26,10 +26,10 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [project.scripts]
-lineage-mcp = "lineage_mcp.server:main"
+mcp-ui-components = "mcp_ui_components.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-lineage_mcp = ["widgets/*.html"]
+mcp_ui_components = ["widgets/*.html"]

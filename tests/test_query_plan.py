@@ -2,10 +2,10 @@
 
 import pytest
 
-from lineage_mcp import QUERY_PLAN_URI, tools
-from lineage_mcp.data import EXAMPLE_JOIN_SQL
-from lineage_mcp.provider import QueryPlanProvider
-from lineage_mcp.sql_query import parse_query_plan
+from mcp_ui_components import QUERY_PLAN_URI, registry as tools
+from mcp_ui_components.shared.examples import EXAMPLE_JOIN_SQL
+from mcp_ui_components.components.query_plan.provider import QueryPlanProvider
+from mcp_ui_components.components.query_plan.sql import parse_query_plan
 
 
 @pytest.fixture(scope="module")

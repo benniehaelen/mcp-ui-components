@@ -48,24 +48,24 @@ request shape either way.
 
 ### 4 · Your Python server dispatches it
 
-The server's `call_tool` handler (`src/lineage_mcp/server.py`) hands off to the
-transport-agnostic dispatch in `src/lineage_mcp/tools.py`:
+The server's `call_tool` handler (`src/mcp_ui_components/server.py`) hands off to the
+transport-agnostic registry (`src/mcp_ui_components/registry.py`), which routes to the
+owning component's handler (here `components/lineage/__init__.py`):
 
 ```python
-# tools.py
-def call_tool(name: str, arguments: dict | None) -> dict:
-    args = arguments or {}
-    ...
-    if name == "describe_node":
-        node = args.get("node")
-        if not node:
-            raise ValueError("describe_node requires 'node'")
-        return {"structuredContent": _provider.describe(node)}
+# components/lineage/__init__.py
+def _describe_node(args: dict) -> dict:
+    node = args.get("node")
+    if not node:
+        raise ValueError("describe_node requires 'node'")
+    return {"structuredContent": _provider.describe(node)}
+
+HANDLERS = {"describe_node": _describe_node, ...}
 ```
 
 ### 5 · Your provider runs the logic + DB access
 
-`src/lineage_mcp/provider.py` is where the real work lives. Today it reads an
+`src/mcp_ui_components/components/lineage/provider.py` is where the real work lives. Today it reads an
 in-memory graph; swap the body for a Neo4j/BigQuery/SQL query and nothing else
 has to change:
 

@@ -16,10 +16,6 @@ through the MCP tool result and out to the widget.
 from __future__ import annotations
 
 from .data import (
-    EXAMPLE_JOIN_NL,
-    EXAMPLE_JOIN_SCAN,
-    EXAMPLE_JOIN_SQL,
-    EXAMPLE_JOIN_TITLE,
     FOCUS_ID,
     INITIAL_VISIBLE,
     NODE_DETAILS,
@@ -27,8 +23,6 @@ from .data import (
     Node,
     build_full_graph,
 )
-from .sql_joins import parse_join_diagram
-from .sql_query import parse_query_plan
 
 # Layer offsets relative to the focus node, used by the widget to lay out columns.
 # Negative = upstream (to the left), positive = downstream (to the right).
@@ -169,61 +163,3 @@ class LineageProvider:
             "downstream": [self._g.nodes[c].label for c in self._g.children(node)],
             **details,
         }
-
-
-class JoinDiagramProvider:
-    """Turns a SQL query into the join-diagram model the widget renders.
-
-    Like ``LineageProvider`` this is the only thing that touches the query: a
-    real implementation might also issue a BigQuery dry-run for the scanned-bytes
-    figure. Here it parses the SQL with ``sql_joins`` and falls back to the
-    bundled monthly-encounter example when no query is supplied.
-    """
-
-    def join_diagram(
-        self,
-        sql: str | None = None,
-        nl: str | None = None,
-        title: str | None = None,
-        dialect: str = "bigquery",
-        scan: str | None = None,
-    ) -> dict:
-        if not sql or not sql.strip():
-            return parse_join_diagram(
-                EXAMPLE_JOIN_SQL,
-                nl=EXAMPLE_JOIN_NL,
-                title=EXAMPLE_JOIN_TITLE,
-                scan=EXAMPLE_JOIN_SCAN,
-            )
-        return parse_join_diagram(
-            sql, nl=nl, title=title, dialect=dialect, scan=scan,
-        )
-
-
-class QueryPlanProvider:
-    """Turns a SQL query into the query-plan model the widget renders.
-
-    The sibling of ``JoinDiagramProvider``: where that one extracts just the join
-    graph, this decomposes the whole statement into its logical execution pipeline
-    (``sql_query.parse_query_plan``). Falls back to the bundled monthly-encounter
-    example when no query is supplied.
-    """
-
-    def query_plan(
-        self,
-        sql: str | None = None,
-        nl: str | None = None,
-        title: str | None = None,
-        dialect: str = "bigquery",
-        scan: str | None = None,
-    ) -> dict:
-        if not sql or not sql.strip():
-            return parse_query_plan(
-                EXAMPLE_JOIN_SQL,
-                nl=EXAMPLE_JOIN_NL,
-                title=EXAMPLE_JOIN_TITLE,
-                scan=EXAMPLE_JOIN_SCAN,
-            )
-        return parse_query_plan(
-            sql, nl=nl, title=title, dialect=dialect, scan=scan,
-        )

@@ -1,9 +1,9 @@
 {
-  "name": "lineage-mcp-widget",
+  "name": "mcp-ui-components-widget",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Build for the lineage MCP App widget. Produces a single self-contained HTML that the Python server vendors and serves as the ui:// resource.",
+  "description": "Builds for the MCP UI component widgets. Each produces a single self-contained HTML that the Python server vendors and serves as a ui:// resource.",
   "scripts": {
     "build": "cross-env INPUT=index.html vite build",
     "watch": "cross-env INPUT=index.html vite build --watch",

@@ -5,7 +5,7 @@ A runnable reference implementation of **MCP Apps** (SEP-1865): a tool returns a
 interaction the widget performs is proxied back through the host as an MCP tool
 call** — governed by the same auth, guardrails, and traces as a prompt.
 
-One MCP server (`lineage-mcp`) serves **three** interactive controls, each a real
+One MCP server (`mcp-ui-components`) serves **three** interactive controls, each a real
 MCP App built with the official
 [`@modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps)
 SDK, so they render as live interactive controls in hosts that support MCP Apps —
@@ -38,28 +38,24 @@ offline demo), so they render in dark mode too:
 | Element | In this repo |
 | --- | --- |
 | **Lineage viewer** | |
-| `view_lineage` (UI-enabled tool, `_meta.ui.resourceUri`) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
-| `expand_lineage_node` (node + direction, called by the widget) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
-| `describe_node` (node details, called when you click a node) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
-| `ui://lineage/viewer.html` (widget resource, `text/html;profile=mcp-app`) | [`src/lineage_mcp/widgets/viewer.html`](src/lineage_mcp/widgets/viewer.html) (built from [`widget/`](widget/)) |
-| Lineage provider (Neo4j / BigQuery stand-in) | [`src/lineage_mcp/provider.py`](src/lineage_mcp/provider.py) + [`data.py`](src/lineage_mcp/data.py) |
+| `view_lineage` / `expand_lineage_node` / `describe_node` (tool schemas + dispatch) | [`src/mcp_ui_components/components/lineage/__init__.py`](src/mcp_ui_components/components/lineage/__init__.py) |
+| `ui://mcp-ui-components/viewer.html` (widget resource, `text/html;profile=mcp-app`) | [`src/mcp_ui_components/widgets/viewer.html`](src/mcp_ui_components/widgets/viewer.html) (built from [`widget/`](widget/)) |
+| Lineage provider (Neo4j / BigQuery stand-in) | [`components/lineage/provider.py`](src/mcp_ui_components/components/lineage/provider.py) + [`data.py`](src/mcp_ui_components/components/lineage/data.py) |
 | **SQL join diagram** | |
-| `view_join_diagram` (UI-enabled tool, `_meta.ui.resourceUri`) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
-| `parse_join_sql` (re-parses pasted/edited SQL, called by the widget) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
-| `export_join_diagram` (writes a self-contained interactive HTML file) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
-| `ui://lineage/join-diagram.html` (widget resource, `text/html;profile=mcp-app`) | [`src/lineage_mcp/widgets/join-diagram.html`](src/lineage_mcp/widgets/join-diagram.html) (built from [`widget/`](widget/)) |
-| SQL → join-model parser (`sqlglot`, multi-dialect) | [`src/lineage_mcp/sql_joins.py`](src/lineage_mcp/sql_joins.py) + `JoinDiagramProvider` in [`provider.py`](src/lineage_mcp/provider.py) |
+| `view_join_diagram` / `parse_join_sql` / `export_join_diagram` (tool schemas + dispatch) | [`src/mcp_ui_components/components/join_diagram/__init__.py`](src/mcp_ui_components/components/join_diagram/__init__.py) |
+| `ui://mcp-ui-components/join-diagram.html` (widget resource, `text/html;profile=mcp-app`) | [`src/mcp_ui_components/widgets/join-diagram.html`](src/mcp_ui_components/widgets/join-diagram.html) (built from [`widget/`](widget/)) |
+| SQL → join-model parser (`sqlglot`, multi-dialect) | [`components/join_diagram/sql.py`](src/mcp_ui_components/components/join_diagram/sql.py) + `JoinDiagramProvider` in [`provider.py`](src/mcp_ui_components/components/join_diagram/provider.py) |
 | **Query plan** | |
-| `view_query_plan` (UI-enabled tool, `_meta.ui.resourceUri`) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
-| `parse_query_plan` (re-parses pasted/edited SQL, called by the widget) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
-| `export_query_plan` (writes a self-contained interactive HTML file) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
-| `ui://lineage/query-plan.html` (widget resource, `text/html;profile=mcp-app`) | [`src/lineage_mcp/widgets/query-plan.html`](src/lineage_mcp/widgets/query-plan.html) (built from [`widget/`](widget/)) |
-| SQL → query-plan parser (`sqlglot`, reuses the join helpers) | [`src/lineage_mcp/sql_query.py`](src/lineage_mcp/sql_query.py) + `QueryPlanProvider` in [`provider.py`](src/lineage_mcp/provider.py) |
+| `view_query_plan` / `parse_query_plan` / `export_query_plan` (tool schemas + dispatch) | [`src/mcp_ui_components/components/query_plan/__init__.py`](src/mcp_ui_components/components/query_plan/__init__.py) |
+| `ui://mcp-ui-components/query-plan.html` (widget resource, `text/html;profile=mcp-app`) | [`src/mcp_ui_components/widgets/query-plan.html`](src/mcp_ui_components/widgets/query-plan.html) (built from [`widget/`](widget/)) |
+| SQL → query-plan parser (`sqlglot`, reuses the join helpers) | [`components/query_plan/sql.py`](src/mcp_ui_components/components/query_plan/sql.py) + `QueryPlanProvider` in [`provider.py`](src/mcp_ui_components/components/query_plan/provider.py) |
 | **Shared** | |
-| Real MCP server (stdio **and** streamable HTTP) | [`src/lineage_mcp/server.py`](src/lineage_mcp/server.py) |
+| Tool/resource registry (aggregates the components) | [`src/mcp_ui_components/registry.py`](src/mcp_ui_components/registry.py) |
+| Shared SQL helpers · seed example · HTML export | [`shared/sql.py`](src/mcp_ui_components/shared/sql.py) · [`examples.py`](src/mcp_ui_components/shared/examples.py) · [`export.py`](src/mcp_ui_components/shared/export.py) |
+| Real MCP server (stdio **and** streamable HTTP) | [`src/mcp_ui_components/server.py`](src/mcp_ui_components/server.py) |
 | Offline host to preview any widget | [`demo/host.py`](demo/host.py) |
 
-Each widget's HTML under `src/lineage_mcp/widgets/` is the **committed build
+Each widget's HTML under `src/mcp_ui_components/widgets/` is the **committed build
 output** of a TypeScript app in `widget/`. You only need Node if you want to
 change a widget (see [Building the widgets](#building-the-widgets)).
 
@@ -89,7 +85,7 @@ interactive controls in chat.
      "servers": {
        "lineage": {
          "command": "python",
-         "args": ["-m", "lineage_mcp.server"],
+         "args": ["-m", "mcp_ui_components.server"],
          "env": { "PYTHONPATH": "C:\\src\\mcp-ui-components\\src" }
        }
      }
@@ -99,7 +95,7 @@ interactive controls in chat.
    > Tip: if VS Code's `python` isn't the interpreter that has `mcp` installed,
    > use that interpreter's **full path** as `command` (e.g.
    > `C:\\Users\\you\\AppData\\Local\\Python\\...\\python.exe`). After
-   > `pip install -e .` you can instead use `"command": "lineage-mcp"` and drop
+   > `pip install -e .` you can instead use `"command": "mcp-ui-components"` and drop
    > `PYTHONPATH`.
 
    **Option B — streamable HTTP.** VS Code connects to a server you run
@@ -108,7 +104,7 @@ interactive controls in chat.
    ```bash
    # PowerShell
    $env:PYTHONPATH = "C:\src\mcp-ui-components\src"
-   python -m lineage_mcp.server --http --port 3001   # serves http://127.0.0.1:3001/mcp
+   python -m mcp_ui_components.server --http --port 3001   # serves http://127.0.0.1:3001/mcp
    ```
 
    then point `mcp.json` at it:
@@ -203,15 +199,15 @@ interactive diagram with **no host needed** — and there (a normal browser tab,
 not a sandbox) its **Export PNG / Export SVG** buttons and **Print** all work.
 
 Files are written to the **workspace folder** (the server's cwd) by default; set
-`LINEAGE_MCP_EXPORT_DIR` in `mcp.json` to pin a different folder:
+`MCP_UI_COMPONENTS_EXPORT_DIR` in `mcp.json` to pin a different folder:
 
 ```jsonc
-"lineage": {
+"mcp-ui-components": {
   "command": "python",
-  "args": ["-m", "lineage_mcp.server"],
+  "args": ["-m", "mcp_ui_components.server"],
   "env": {
     "PYTHONPATH": "C:\\src\\mcp-ui-components\\src",
-    "LINEAGE_MCP_EXPORT_DIR": "C:\\Users\\you\\Desktop"
+    "MCP_UI_COMPONENTS_EXPORT_DIR": "C:\\Users\\you\\Desktop"
   }
 }
 ```
@@ -269,17 +265,17 @@ On the server side, the tool declares its UI and the resource uses the MCP Apps
 MIME type:
 
 ```python
-# tools.py (shape)
+# components/lineage/__init__.py (shape)
 TOOLS = [{
   "name": "view_lineage",
-  "_meta": {"ui": {"resourceUri": "ui://lineage/viewer.html"}},
+  "_meta": {"ui": {"resourceUri": "ui://mcp-ui-components/viewer.html"}},
   ...
 }]
 RESOURCE_MIME_TYPE = "text/html;profile=mcp-app"
 ```
 
 The **join diagram** follows the identical pattern: `view_join_diagram` declares
-`ui://lineage/join-diagram.html`, and the widget's **Edit SQL → Apply** action
+`ui://mcp-ui-components/join-diagram.html`, and the widget's **Edit SQL → Apply** action
 proxies through `app.callServerTool({ name: "parse_join_sql", … })` — the same
 governed round-trip, so re-parsing edited SQL is auditable exactly like a prompt.
 
@@ -321,15 +317,15 @@ npm install
 
 # Lineage viewer:
 npm run build
-cp dist/index.html ../src/lineage_mcp/widgets/viewer.html
+cp dist/index.html ../src/mcp_ui_components/widgets/viewer.html
 
 # SQL join diagram:
 npm run build:join
-cp dist/join-diagram.html ../src/lineage_mcp/widgets/join-diagram.html
+cp dist/join-diagram.html ../src/mcp_ui_components/widgets/join-diagram.html
 
 # Query plan:
 npm run build:plan
-cp dist/query-plan.html ../src/lineage_mcp/widgets/query-plan.html
+cp dist/query-plan.html ../src/mcp_ui_components/widgets/query-plan.html
 ```
 
 | App | Shell | Source | Served as |
@@ -349,14 +345,18 @@ cp dist/query-plan.html ../src/lineage_mcp/widgets/query-plan.html
 ## Project layout
 
 ```
-src/lineage_mcp/
-  __init__.py               package + WIDGET_URI / JOIN_WIDGET_URI / QUERY_PLAN_URI
-  data.py                   seed lineage graph + bundled SQL example (dataclasses)
-  provider.py               LineageProvider (view/expand) + JoinDiagramProvider + QueryPlanProvider
-  sql_joins.py              SQL → join-model parser (sqlglot, multi-dialect)
-  sql_query.py              SQL → query-plan parser (sqlglot; reuses the join helpers)
-  tools.py                  tool schemas, dispatch, widget resources (transport-agnostic)
+src/mcp_ui_components/
+  __init__.py               version + WIDGET_URI / JOIN_WIDGET_URI / QUERY_PLAN_URI + MIME type
+  registry.py               aggregates the components into the server's tool/resource surface
   server.py                 real MCP server — stdio and streamable HTTP
+  shared/
+    sql.py                  sqlglot AST helpers + colour palette (shared by both parsers)
+    examples.py             bundled SQL example (shared by the two SQL controls)
+    export.py               self-contained interactive-HTML export (the export_* tools)
+  components/
+    lineage/                __init__.py (tools+dispatch) · provider.py · data.py
+    join_diagram/           __init__.py · provider.py · sql.py (SQL → join-model parser)
+    query_plan/             __init__.py · provider.py · sql.py (SQL → query-plan parser)
   widgets/viewer.html       built lineage-viewer widget (committed build output)
   widgets/join-diagram.html built join-diagram widget   (committed build output)
   widgets/query-plan.html   built query-plan widget     (committed build output)

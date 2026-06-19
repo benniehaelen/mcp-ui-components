@@ -1,9 +1,9 @@
-"""Real MCP server over stdio.
+"""Real MCP server (stdio + streamable HTTP).
 
-Run it directly (``python -m lineage_mcp.server`` or the ``lineage-mcp`` script)
-and point a host such as Claude Desktop or VS Code at it. It exposes exactly the
-tools and resource defined in :mod:`lineage_mcp.tools`, so a production host
-renders the same widget and proxies the same calls the local demo does.
+Run it directly (``python -m mcp_ui_components.server`` or the ``mcp-ui-components``
+script) and point a host such as Claude Desktop or VS Code at it. It exposes exactly
+the tools and resources defined in :mod:`mcp_ui_components.registry`, so a production
+host renders the same widgets and proxies the same calls the local demo does.
 
 Requires the official MCP Python SDK (``pip install mcp``). The browser demo in
 ``demo/`` does **not** need this dependency.
@@ -14,8 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from . import WIDGET_URI
-from . import tools as toolset
+from . import registry as toolset
 
 
 def _build_server():
@@ -23,7 +22,7 @@ def _build_server():
     from mcp.server import Server
     import mcp.types as types
 
-    server = Server("lineage-mcp")
+    server = Server("mcp-ui-components")
 
     @server.list_tools()
     async def list_tools() -> list[types.Tool]:

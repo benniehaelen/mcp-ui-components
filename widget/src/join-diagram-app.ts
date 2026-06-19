@@ -2,7 +2,7 @@
  * Join diagram — an interactive MCP App widget.
  *
  * Renders the *join-diagram model* produced by the `view_join_diagram` tool
- * (see src/lineage_mcp/sql_joins.py): one card per table wired by join-key
+ * (see src/mcp_ui_components/components/join_diagram/sql.py): one card per table wired by join-key
  * connectors, plus the natural-language prompt and the source SQL.
  *
  * Interactions layered on the static diagram:
@@ -539,7 +539,10 @@ function fit() {
   const sw = stage.clientWidth, sh = stage.clientHeight;
   const ww = wrapper.scrollWidth, wh = wrapper.scrollHeight;
   const z = Math.min(1, (sw - 24) / ww, (sh - 24) / wh);
-  zoom = Math.max(MIN_ZOOM, z || 1);
+  // Fit must be able to zoom out further than the manual MIN_ZOOM floor, or a
+  // tall diagram (e.g. a star of big cards) overflows the stage and the bottom
+  // cards get clipped — looking like fewer tables than there really are.
+  zoom = Math.max(0.05, z || 1);
   panX = Math.max(0, (sw - ww * zoom) / 2);
   panY = Math.max(0, (sh - wh * zoom) / 2);
   $("zoom-label").textContent = Math.round(zoom * 100) + "%";
