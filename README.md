@@ -5,7 +5,7 @@ A runnable reference implementation of **MCP Apps** (SEP-1865): a tool returns a
 interaction the widget performs is proxied back through the host as an MCP tool
 call** — governed by the same auth, guardrails, and traces as a prompt.
 
-One MCP server (`lineage-mcp`) serves **two** interactive controls, each a real
+One MCP server (`lineage-mcp`) serves **three** interactive controls, each a real
 MCP App built with the official
 [`@modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps)
 SDK, so they render as live interactive controls in hosts that support MCP Apps —
@@ -15,6 +15,7 @@ SDK, so they render as live interactive controls in hosts that support MCP Apps 
 | --- | --- | --- |
 | **Lineage viewer** | `view_lineage` | A data-lineage graph you expand and inspect node by node. |
 | **SQL join diagram** | `view_join_diagram` | The joins in a SQL query as draggable table cards (join keys, columns, filters) wired by join-key connectors, alongside the natural-language prompt and the source SQL. |
+| **Query plan** | `view_query_plan` | A whole SQL statement as an EXPLAIN-style logical execution pipeline: one operator box per clause (scan, join, filter, group-by, having, window, project, distinct, sort, limit) in execution order, with CTEs/subqueries as lanes that feed downstream operators. |
 
 ![Architecture](docs/mcp-apps-control-plane.png)
 
@@ -47,9 +48,14 @@ offline demo), so they render in dark mode too:
 | `parse_join_sql` (re-parses pasted/edited SQL, called by the widget) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
 | `ui://lineage/join-diagram.html` (widget resource, `text/html;profile=mcp-app`) | [`src/lineage_mcp/widgets/join-diagram.html`](src/lineage_mcp/widgets/join-diagram.html) (built from [`widget/`](widget/)) |
 | SQL → join-model parser (`sqlglot`, multi-dialect) | [`src/lineage_mcp/sql_joins.py`](src/lineage_mcp/sql_joins.py) + `JoinDiagramProvider` in [`provider.py`](src/lineage_mcp/provider.py) |
+| **Query plan** | |
+| `view_query_plan` (UI-enabled tool, `_meta.ui.resourceUri`) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
+| `parse_query_plan` (re-parses pasted/edited SQL, called by the widget) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
+| `ui://lineage/query-plan.html` (widget resource, `text/html;profile=mcp-app`) | [`src/lineage_mcp/widgets/query-plan.html`](src/lineage_mcp/widgets/query-plan.html) (built from [`widget/`](widget/)) |
+| SQL → query-plan parser (`sqlglot`, reuses the join helpers) | [`src/lineage_mcp/sql_query.py`](src/lineage_mcp/sql_query.py) + `QueryPlanProvider` in [`provider.py`](src/lineage_mcp/provider.py) |
 | **Shared** | |
 | Real MCP server (stdio **and** streamable HTTP) | [`src/lineage_mcp/server.py`](src/lineage_mcp/server.py) |
-| Offline host to preview either widget | [`demo/host.py`](demo/host.py) |
+| Offline host to preview any widget | [`demo/host.py`](demo/host.py) |
 
 Each widget's HTML under `src/lineage_mcp/widgets/` is the **committed build
 output** of a TypeScript app in `widget/`. You only need Node if you want to
@@ -59,13 +65,13 @@ change a widget (see [Building the widgets](#building-the-widgets)).
 
 ## Use it in VS Code (the real thing)
 
-VS Code Copilot Chat has full MCP Apps support, so both widgets render as
+VS Code Copilot Chat has full MCP Apps support, so all three widgets render as
 interactive controls in chat.
 
 1. Install the server's dependencies (`mcp` + `sqlglot`):
 
    ```bash
-   pip install -e .          # installs both; `pip install mcp` alone omits sqlglot (the join diagram needs it)
+   pip install -e .          # installs both; `pip install mcp` alone omits sqlglot (the SQL controls need it)
    ```
 
 2. Add the server to VS Code's `mcp.json`
@@ -119,7 +125,7 @@ interactive controls in chat.
 3. Start the server in VS Code (`MCP: List Servers → lineage → Start`), then open
    Copilot Chat in **Agent** mode. Either ask in plain language, or reference the
    tool directly with `#` to force the call and render it inline — e.g. type
-   `#view_lineage` or `#view_join_diagram`.
+   `#view_lineage`, `#view_join_diagram`, or `#view_query_plan`.
 
    **Lineage viewer** — ask:
 
@@ -155,19 +161,39 @@ interactive controls in chat.
    | **Edit SQL → Apply** | `parse_join_sql` → re-parses your edited SQL and re-renders the diagram |
    | **Copy SQL · Export PNG/SVG** | copy the query / export the diagram (local) |
 
+   **Query plan** — paste a query (or ask with no SQL for the bundled example):
+
+   > Show the execution plan for this query: `WITH … SELECT … GROUP BY …`
+
+   The model calls `view_query_plan`; VS Code renders the statement as a pipeline
+   of operator boxes in logical execution order, one lane per CTE/subquery.
+   Interactions:
+
+   | Interaction | What happens |
+   | --- | --- |
+   | **Hover / click an operator** | highlight its tables + columns in the SQL, dim the rest (local) |
+   | **Click a lane in the legend** | focus that lane (CTE / subquery / main) (local) |
+   | **Click a lane header** | collapse / expand the lane (local) |
+   | **Drag an operator** | reposition it (local) |
+   | **Detail / Collapse lanes** | hide operator detail lines / collapse every lane (local) |
+   | **Zoom / Fit / Reset view** | zoom controls; Fit frames the plan; Reset view restores the auto-layout (local) |
+   | **Edit SQL → Apply** | `parse_query_plan` → re-parses your edited SQL and re-renders the pipeline |
+   | **Copy SQL · Export PNG/SVG** | copy the query / export the plan (local) |
+
 ---
 
 ## Preview it offline (no Node, no VS Code)
 
 `demo/host.py` launches the MCP server **and** a vendored copy of the official
 MCP Apps reference host, wired together. It speaks the same protocol VS Code
-uses, so it's a faithful preview — and it exposes **both** controls.
+uses, so it's a faithful preview — and it exposes **all three** controls.
 
 ```bash
-pip install -e .          # the join diagram needs sqlglot (a declared dependency)
+pip install -e .          # the SQL controls need sqlglot (a declared dependency)
 python demo/host.py
 # lineage viewer:   http://localhost:8080/?tool=view_lineage&call=true
 # SQL join diagram: http://localhost:8080/?tool=view_join_diagram&call=true
+# query plan:       http://localhost:8080/?tool=view_query_plan&call=true
 ```
 
 It serves:
@@ -264,17 +290,23 @@ cp dist/index.html ../src/lineage_mcp/widgets/viewer.html
 # SQL join diagram:
 npm run build:join
 cp dist/join-diagram.html ../src/lineage_mcp/widgets/join-diagram.html
+
+# Query plan:
+npm run build:plan
+cp dist/query-plan.html ../src/lineage_mcp/widgets/query-plan.html
 ```
 
 | App | Shell | Source | Served as |
 | --- | --- | --- | --- |
 | Lineage viewer | `widget/index.html` | `widget/src/lineage-app.ts` | `widgets/viewer.html` |
 | SQL join diagram | `widget/join-diagram.html` | `widget/src/join-diagram-app.ts` | `widgets/join-diagram.html` |
+| Query plan | `widget/query-plan.html` | `widget/src/query-plan-app.ts` | `widgets/query-plan.html` |
 
-> The server re-reads `widgets/join-diagram.html` from disk on **every** tool
-> call (its cache is disabled), so after `npm run build:join` + copy you can just
-> re-invoke the tool — no server restart needed. The lineage viewer's HTML *is*
-> cached, so it needs a server restart to pick up a rebuild.
+> The server re-reads the `join-diagram.html` and `query-plan.html` resources
+> from disk on **every** tool call (their cache is disabled), so after a
+> `build:join` / `build:plan` + copy you can just re-invoke the tool — no server
+> restart needed. The lineage viewer's HTML *is* cached, so it needs a server
+> restart to pick up a rebuild.
 
 ---
 
@@ -282,23 +314,27 @@ cp dist/join-diagram.html ../src/lineage_mcp/widgets/join-diagram.html
 
 ```
 src/lineage_mcp/
-  __init__.py               package + WIDGET_URI / JOIN_WIDGET_URI
-  data.py                   seed lineage graph + bundled join example (dataclasses)
-  provider.py               LineageProvider (view/expand) + JoinDiagramProvider
+  __init__.py               package + WIDGET_URI / JOIN_WIDGET_URI / QUERY_PLAN_URI
+  data.py                   seed lineage graph + bundled SQL example (dataclasses)
+  provider.py               LineageProvider (view/expand) + JoinDiagramProvider + QueryPlanProvider
   sql_joins.py              SQL → join-model parser (sqlglot, multi-dialect)
+  sql_query.py              SQL → query-plan parser (sqlglot; reuses the join helpers)
   tools.py                  tool schemas, dispatch, widget resources (transport-agnostic)
   server.py                 real MCP server — stdio and streamable HTTP
   widgets/viewer.html       built lineage-viewer widget (committed build output)
   widgets/join-diagram.html built join-diagram widget   (committed build output)
-widget/                     TypeScript source for both widgets (Vite single-file builds)
-  index.html / src/lineage-app.ts          lineage viewer
+  widgets/query-plan.html   built query-plan widget     (committed build output)
+widget/                     TypeScript source for all widgets (Vite single-file builds)
+  index.html / src/lineage-app.ts              lineage viewer
   join-diagram.html / src/join-diagram-app.ts  SQL join diagram
+  query-plan.html / src/query-plan-app.ts      query plan
 demo/
   host.py                   offline launcher: MCP server + vendored reference host
   _vendor_host/             MIT-licensed prebuilt MCP Apps reference host
 tests/
   test_provider.py          provider + dispatch + resource tests
   test_join_model.py        SQL → join-model parser tests
+  test_query_plan.py        SQL → query-plan parser tests
 docs/                       the source diagram + live screenshots
 ```
 
@@ -310,7 +346,8 @@ python -m pytest tests/ -q
 ```
 
 `test_provider.py` covers the lineage provider, dispatch, and widget resource;
-`test_join_model.py` covers the SQL → join-model parser. The lineage control is
+`test_join_model.py` and `test_query_plan.py` cover the SQL → join-model and
+SQL → query-plan parsers (and their tool dispatch). The lineage control is
 additionally verified end-to-end by driving the official MCP Apps reference host
 against this server with Playwright: it connects, calls `view_lineage`, renders
 the widget, and the proxied `expand_lineage_node` grows the graph to 10 nodes.
