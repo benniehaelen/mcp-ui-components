@@ -216,41 +216,41 @@ EXAMPLE_JOIN_NL = (
 
 EXAMPLE_JOIN_SQL = """WITH base_encounters AS (
   SELECT
-    e.coid,
-    e.patient_account_num,
-    e.facility_mnemonic,
+    e.facility_id,
+    e.encounter_id,
+    e.region_code,
     f.facility_name,
-    DATE_TRUNC(DATE(SAFE_CAST(e.admission_date_time AS DATETIME)), MONTH) AS encounter_month,
-    FORMAT('%s|%s', e.coid, e.patient_account_num) AS encounter_key
-  FROM `hca-hin-prod-cur-clinical.clinical_core_silver.encounter` e
-  INNER JOIN `hca-hin-prod-cur-clinical.clinical_core_silver.clinical_facility_master` f
-    ON e.coid = f.coid
-   AND e.facility_mnemonic = f.facility_mnemonic
-  WHERE e.latest_record_ind = 1
-    AND SAFE_CAST(e.admission_date_time AS DATETIME) >= DATETIME '2025-01-01 00:00:00'
-    AND SAFE_CAST(e.admission_date_time AS DATETIME) < DATETIME '2026-01-01 00:00:00'
-    AND f.load_active_ind = 1
-    AND LOWER(f.load_status) = 'active'
+    DATE_TRUNC(DATE(SAFE_CAST(e.admitted_at AS DATETIME)), MONTH) AS encounter_month,
+    FORMAT('%s|%s', e.facility_id, e.encounter_id) AS encounter_key
+  FROM `analytics-prod.clinical_core.encounters` e
+  INNER JOIN `analytics-prod.clinical_core.facilities` f
+    ON e.facility_id = f.facility_id
+   AND e.region_code = f.region_code
+  WHERE e.is_current = 1
+    AND SAFE_CAST(e.admitted_at AS DATETIME) >= DATETIME '2025-01-01 00:00:00'
+    AND SAFE_CAST(e.admitted_at AS DATETIME) < DATETIME '2026-01-01 00:00:00'
+    AND f.is_active = 1
+    AND LOWER(f.status) = 'active'
 ),
 attending_providers AS (
   SELECT
-    ep.coid,
-    ep.patient_account_num,
+    ep.facility_id,
+    ep.encounter_id,
     COALESCE(
       NULLIF(TRIM(CONCAT(COALESCE(ep.provider_first_name, ''), ' ', COALESCE(ep.provider_last_name, ''))), ''),
-      ep.national_provider_id,
-      ep.source_provider_id
+      ep.provider_npi,
+      ep.provider_source_id
     ) AS attending_provider_name
-  FROM `hca-hin-prod-cur-clinical.clinical_core_silver.encounter_provider` ep
-  WHERE ep.latest_record_ind = 1
-    AND REGEXP_CONTAINS(LOWER(ep.provider_role), r'attending')
+  FROM `analytics-prod.clinical_core.providers` ep
+  WHERE ep.is_current = 1
+    AND REGEXP_CONTAINS(LOWER(ep.role), r'attending')
 ),
 patient_gender AS (
   SELECT
-    p.coid,
-    p.patient_account_num,
-    p.patient_gender_code
-  FROM `hca-hin-prod-cur-clinical.clinical_core_silver.encounter_patient` p
+    p.facility_id,
+    p.encounter_id,
+    p.gender_code
+  FROM `analytics-prod.clinical_core.patients` p
 )
 SELECT
   b.facility_name,
@@ -258,18 +258,18 @@ SELECT
   ap.attending_provider_name,
   FORMAT(
     'F %.1f%% | M %.1f%% | Other/Unknown %.1f%%',
-    100 * SAFE_DIVIDE(COUNT(DISTINCT IF(LOWER(COALESCE(pg.patient_gender_code, '')) IN ('f', 'female'), b.encounter_key, NULL)), COUNT(DISTINCT b.encounter_key)),
-    100 * SAFE_DIVIDE(COUNT(DISTINCT IF(LOWER(COALESCE(pg.patient_gender_code, '')) IN ('m', 'male'), b.encounter_key, NULL)), COUNT(DISTINCT b.encounter_key)),
-    100 * SAFE_DIVIDE(COUNT(DISTINCT IF(LOWER(COALESCE(pg.patient_gender_code, '')) NOT IN ('f', 'female', 'm', 'male'), b.encounter_key, NULL)), COUNT(DISTINCT b.encounter_key))
+    100 * SAFE_DIVIDE(COUNT(DISTINCT IF(LOWER(COALESCE(pg.gender_code, '')) IN ('f', 'female'), b.encounter_key, NULL)), COUNT(DISTINCT b.encounter_key)),
+    100 * SAFE_DIVIDE(COUNT(DISTINCT IF(LOWER(COALESCE(pg.gender_code, '')) IN ('m', 'male'), b.encounter_key, NULL)), COUNT(DISTINCT b.encounter_key)),
+    100 * SAFE_DIVIDE(COUNT(DISTINCT IF(LOWER(COALESCE(pg.gender_code, '')) NOT IN ('f', 'female', 'm', 'male'), b.encounter_key, NULL)), COUNT(DISTINCT b.encounter_key))
   ) AS patient_gender_mix,
   COUNT(DISTINCT b.encounter_key) AS total_encounters
 FROM base_encounters b
 INNER JOIN attending_providers ap
-  ON b.coid = ap.coid
- AND b.patient_account_num = ap.patient_account_num
+  ON b.facility_id = ap.facility_id
+ AND b.encounter_id = ap.encounter_id
 LEFT JOIN patient_gender pg
-  ON b.coid = pg.coid
- AND b.patient_account_num = pg.patient_account_num
+  ON b.facility_id = pg.facility_id
+ AND b.encounter_id = pg.encounter_id
 GROUP BY
   b.facility_name,
   month,

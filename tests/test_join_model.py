@@ -20,72 +20,72 @@ def _card(model, name):
 def test_example_has_four_cards_with_spine(model):
     names = [c["name"] for c in model["tables"]]
     assert names == [
-        "encounter",
-        "clinical_facility_master",
-        "encounter_provider",
-        "encounter_patient",
+        "encounters",
+        "facilities",
+        "providers",
+        "patients",
     ]
     assert model["tableCount"] == 4
     spine = [c for c in model["tables"] if c["role"] == "spine"]
-    assert len(spine) == 1 and spine[0]["name"] == "encounter"
+    assert len(spine) == 1 and spine[0]["name"] == "encounters"
 
 
 def test_three_joins_two_inner_one_left(model):
     assert model["joinCounts"] == {"INNER": 2, "LEFT": 1}
     # every connector fans out from the spine card (matches the hand diagram)
-    spine_id = _card(model, "encounter")["id"]
+    spine_id = _card(model, "encounters")["id"]
     assert all(j["from"] == spine_id for j in model["joins"])
     by_to = {j["toName"]: j for j in model["joins"]}
-    assert by_to["clinical_facility_master"]["type"] == "INNER"
-    assert by_to["clinical_facility_master"]["keys"] == ["coid", "facility_mnemonic"]
-    assert by_to["encounter_provider"]["type"] == "INNER"
-    assert by_to["encounter_provider"]["keys"] == ["coid", "patient_account_num"]
-    assert by_to["encounter_patient"]["type"] == "LEFT"
+    assert by_to["facilities"]["type"] == "INNER"
+    assert by_to["facilities"]["keys"] == ["facility_id", "region_code"]
+    assert by_to["providers"]["type"] == "INNER"
+    assert by_to["providers"]["keys"] == ["facility_id", "encounter_id"]
+    assert by_to["patients"]["type"] == "LEFT"
     # connector colour matches the destination card accent
-    assert by_to["encounter_patient"]["color"] == _card(model, "encounter_patient")["accent"]
+    assert by_to["patients"]["color"] == _card(model, "patients")["accent"]
 
 
 def test_join_keys_per_card(model):
-    assert _card(model, "encounter")["joinKeys"] == [
-        "coid", "facility_mnemonic", "patient_account_num",
+    assert _card(model, "encounters")["joinKeys"] == [
+        "facility_id", "region_code", "encounter_id",
     ]
-    assert _card(model, "clinical_facility_master")["joinKeys"] == [
-        "coid", "facility_mnemonic",
+    assert _card(model, "facilities")["joinKeys"] == [
+        "facility_id", "region_code",
     ]
-    assert _card(model, "encounter_provider")["joinKeys"] == [
-        "coid", "patient_account_num",
+    assert _card(model, "providers")["joinKeys"] == [
+        "facility_id", "encounter_id",
     ]
 
 
 def test_cte_membership_and_join_type_per_card(model):
-    assert _card(model, "encounter")["cte"] == "base_encounters"
-    assert _card(model, "clinical_facility_master")["cte"] == "base_encounters"
-    assert _card(model, "encounter_provider")["cte"] == "attending_providers"
-    assert _card(model, "encounter_patient")["cte"] == "patient_gender"
+    assert _card(model, "encounters")["cte"] == "base_encounters"
+    assert _card(model, "facilities")["cte"] == "base_encounters"
+    assert _card(model, "providers")["cte"] == "attending_providers"
+    assert _card(model, "patients")["cte"] == "patient_gender"
     # how each non-spine table entered the query
-    assert _card(model, "clinical_facility_master")["joinType"] == "INNER"
-    assert _card(model, "encounter_patient")["joinType"] == "LEFT"
+    assert _card(model, "facilities")["joinType"] == "INNER"
+    assert _card(model, "patients")["joinType"] == "LEFT"
 
 
 def test_derived_outputs_attributed(model):
-    enc = [d["name"] for d in _card(model, "encounter")["derivedOutputs"]]
+    enc = [d["name"] for d in _card(model, "encounters")["derivedOutputs"]]
     assert "encounter_month" in enc and "encounter_key" in enc
-    prov = [d["name"] for d in _card(model, "encounter_provider")["derivedOutputs"]]
+    prov = [d["name"] for d in _card(model, "providers")["derivedOutputs"]]
     assert prov == ["attending_provider_name"]
 
 
 def test_filters_attributed_to_right_card(model):
-    enc_filters = " ".join(f["expr"] for f in _card(model, "encounter")["filters"])
-    assert "latest_record_ind = 1" in enc_filters
-    fac_filters = " ".join(f["expr"] for f in _card(model, "clinical_facility_master")["filters"])
-    assert "load_active_ind = 1" in fac_filters
-    assert "load_status" in fac_filters
+    enc_filters = " ".join(f["expr"] for f in _card(model, "encounters")["filters"])
+    assert "is_current = 1" in enc_filters
+    fac_filters = " ".join(f["expr"] for f in _card(model, "facilities")["filters"])
+    assert "is_active = 1" in fac_filters
+    assert "status" in fac_filters
     # the LEFT-joined table has no standalone WHERE filter
-    assert _card(model, "encounter_patient")["filters"] == []
+    assert _card(model, "patients")["filters"] == []
 
 
 def test_metadata(model):
-    assert model["dataset"] == "hca-hin-prod-cur-clinical.clinical_core_silver"
+    assert model["dataset"] == "analytics-prod.clinical_core"
     assert model["scan"] == "549.2 GB"
     assert model["period"] == {"start": "2025-01-01", "end": "2026-01-01"}
     assert model["nl"].startswith("For calendar year 2025")
