@@ -46,11 +46,13 @@ offline demo), so they render in dark mode too:
 | **SQL join diagram** | |
 | `view_join_diagram` (UI-enabled tool, `_meta.ui.resourceUri`) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
 | `parse_join_sql` (re-parses pasted/edited SQL, called by the widget) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
+| `export_join_diagram` (writes a self-contained interactive HTML file) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
 | `ui://lineage/join-diagram.html` (widget resource, `text/html;profile=mcp-app`) | [`src/lineage_mcp/widgets/join-diagram.html`](src/lineage_mcp/widgets/join-diagram.html) (built from [`widget/`](widget/)) |
 | SQL → join-model parser (`sqlglot`, multi-dialect) | [`src/lineage_mcp/sql_joins.py`](src/lineage_mcp/sql_joins.py) + `JoinDiagramProvider` in [`provider.py`](src/lineage_mcp/provider.py) |
 | **Query plan** | |
 | `view_query_plan` (UI-enabled tool, `_meta.ui.resourceUri`) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
 | `parse_query_plan` (re-parses pasted/edited SQL, called by the widget) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
+| `export_query_plan` (writes a self-contained interactive HTML file) | [`src/lineage_mcp/tools.py`](src/lineage_mcp/tools.py) |
 | `ui://lineage/query-plan.html` (widget resource, `text/html;profile=mcp-app`) | [`src/lineage_mcp/widgets/query-plan.html`](src/lineage_mcp/widgets/query-plan.html) (built from [`widget/`](widget/)) |
 | SQL → query-plan parser (`sqlglot`, reuses the join helpers) | [`src/lineage_mcp/sql_query.py`](src/lineage_mcp/sql_query.py) + `QueryPlanProvider` in [`provider.py`](src/lineage_mcp/provider.py) |
 | **Shared** | |
@@ -159,7 +161,9 @@ interactive controls in chat.
    | **Columns / Derived / Filters** toggles | show/hide those sections (local) |
    | **Zoom / Fit / Reset view** | zoom controls; Fit frames the diagram; Reset view restores the auto-layout (local) |
    | **Edit SQL → Apply** | `parse_join_sql` → re-parses your edited SQL and re-renders the diagram |
-   | **Copy SQL · Export PNG/SVG** | copy the query / export the diagram (local) |
+   | **Copy SQL** | copy the query (local) |
+
+   To save a diagram, see [Exporting](#exporting) below.
 
    **Query plan** — paste a query (or ask with no SQL for the bundled example):
 
@@ -178,7 +182,39 @@ interactive controls in chat.
    | **Detail / Collapse lanes** | hide operator detail lines / collapse every lane (local) |
    | **Zoom / Fit / Reset view** | zoom controls; Fit frames the plan; Reset view restores the auto-layout (local) |
    | **Edit SQL → Apply** | `parse_query_plan` → re-parses your edited SQL and re-renders the pipeline |
-   | **Copy SQL · Export PNG/SVG** | copy the query / export the plan (local) |
+   | **Copy SQL** | copy the query (local) |
+
+   To save a plan, see [Exporting](#exporting) below.
+
+### Exporting
+
+The widget renders inside a **sandboxed iframe**, which blocks file downloads —
+so export lives *outside* the widget, as governed MCP tools you call from chat:
+
+| Tool | What it does |
+| --- | --- |
+| `export_join_diagram` | Writes a self-contained, **interactive** HTML copy of the join diagram to disk and returns the path. |
+| `export_query_plan` | Same, for the query plan. |
+
+Invoke one with `#export_query_plan` (or just ask: *"export this as HTML"*).
+It reuses the vendored widget bundle with your parsed model injected as
+`window.__MCP_MODEL__`, so opening the file in any browser renders the full
+interactive diagram with **no host needed** — and there (a normal browser tab,
+not a sandbox) its **Export PNG / Export SVG** buttons and **Print** all work.
+
+Files are written to the **workspace folder** (the server's cwd) by default; set
+`LINEAGE_MCP_EXPORT_DIR` in `mcp.json` to pin a different folder:
+
+```jsonc
+"lineage": {
+  "command": "python",
+  "args": ["-m", "lineage_mcp.server"],
+  "env": {
+    "PYTHONPATH": "C:\\src\\mcp-ui-components\\src",
+    "LINEAGE_MCP_EXPORT_DIR": "C:\\Users\\you\\Desktop"
+  }
+}
+```
 
 ---
 
