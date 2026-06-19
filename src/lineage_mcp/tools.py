@@ -19,12 +19,13 @@ from __future__ import annotations
 from functools import lru_cache
 from importlib import resources
 
-from . import JOIN_WIDGET_URI, WIDGET_URI
+from . import JOIN_WIDGET_URI, QUERY_PLAN_URI, WIDGET_URI
 from .data import FOCUS_ID
-from .provider import JoinDiagramProvider, LineageProvider
+from .provider import JoinDiagramProvider, LineageProvider, QueryPlanProvider
 
 _provider = LineageProvider()
 _joins = JoinDiagramProvider()
+_plans = QueryPlanProvider()
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +51,17 @@ def join_widget_html() -> str:
             .read_text(encoding="utf-8"))
 
 
+def query_plan_html() -> str:
+    """The HTML served at ``ui://lineage/query-plan.html``.
+
+    Like :func:`join_widget_html`, deliberately *not* cached so a fresh
+    ``build:plan`` shows up on the next tool call without a server restart.
+    """
+    return (resources.files("lineage_mcp")
+            .joinpath("widgets/query-plan.html")
+            .read_text(encoding="utf-8"))
+
+
 # The MCP Apps (SEP-1865) MIME type. A host uses this to recognise that the
 # resource is an interactive App UI rather than plain HTML.
 RESOURCE_MIME_TYPE = "text/html;profile=mcp-app"
@@ -60,6 +72,17 @@ RESOURCES = [
         "name": "Lineage viewer widget",
         "description": "Interactive data-lineage graph. Rendered by the host "
                        "inside a sandboxed iframe.",
+        "mimeType": RESOURCE_MIME_TYPE,
+    },
+    {
+        "uri": QUERY_PLAN_URI,
+        "name": "Query plan widget",
+        "description": "Interactive EXPLAIN-style logical execution pipeline: one "
+                       "operator box per SQL clause (scan, join, filter, group-by, "
+                       "having, window, project, distinct, sort, limit) in "
+                       "execution order, with CTEs/subqueries as lanes that feed "
+                       "downstream operators. Rendered by the host inside a "
+                       "sandboxed iframe.",
         "mimeType": RESOURCE_MIME_TYPE,
     },
     {
@@ -78,6 +101,8 @@ def read_resource(uri: str) -> str:
         return widget_html()
     if uri == JOIN_WIDGET_URI:
         return join_widget_html()
+    if uri == QUERY_PLAN_URI:
+        return query_plan_html()
     raise KeyError(f"unknown resource: {uri!r}")
 
 
@@ -206,6 +231,58 @@ TOOLS = [
             "required": ["sql"],
         },
     },
+    {
+        "name": "view_query_plan",
+        "description": "Visualise an entire SQL statement as a logical execution "
+                       "pipeline (EXPLAIN-style): one operator box per clause "
+                       "(scan, join, filter, group-by, having, window, project, "
+                       "distinct, sort, limit) in the order SQL logically runs, "
+                       "with CTEs/subqueries as lanes that feed downstream "
+                       "operators. With no SQL it shows a bundled example.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sql": {
+                    "type": "string",
+                    "description": "The SQL query to diagram. Omit to render the "
+                                   "bundled monthly-encounter example.",
+                },
+                "nl": {
+                    "type": "string",
+                    "description": "Optional natural-language prompt the SQL was "
+                                   "generated from.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional title shown in the header.",
+                },
+            },
+        },
+        # SEP-1865 / MCP Apps: marks the tool UI-enabled and names its widget.
+        "_meta": {
+            "ui": {
+                "resourceUri": QUERY_PLAN_URI,
+                "preferredSize": {"width": 1000, "height": 680},
+            },
+            "ui/resourceUri": QUERY_PLAN_URI,
+        },
+    },
+    {
+        "name": "parse_query_plan",
+        "description": "Parse a SQL query into the query-plan model without "
+                       "(re)opening the widget. Called by the query-plan widget "
+                       "when the user pastes or edits SQL, so the pipeline "
+                       "re-renders via the same governed round-trip.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sql": {"type": "string", "description": "The SQL query to parse."},
+                "nl": {"type": "string", "description": "Optional NL prompt."},
+                "title": {"type": "string", "description": "Optional title."},
+            },
+            "required": ["sql"],
+        },
+    },
 ]
 
 
@@ -261,6 +338,26 @@ def call_tool(name: str, arguments: dict | None) -> dict:
         if not sql:
             raise ValueError("parse_join_sql requires 'sql'")
         model = _joins.join_diagram(
+            sql=sql, nl=args.get("nl"), title=args.get("title"),
+        )
+        return {"structuredContent": model}
+
+    if name == "view_query_plan":
+        model = _plans.query_plan(
+            sql=args.get("sql"),
+            nl=args.get("nl"),
+            title=args.get("title"),
+        )
+        return {
+            "structuredContent": model,
+            "_meta": {"ui": {"resourceUri": QUERY_PLAN_URI}},
+        }
+
+    if name == "parse_query_plan":
+        sql = args.get("sql")
+        if not sql:
+            raise ValueError("parse_query_plan requires 'sql'")
+        model = _plans.query_plan(
             sql=sql, nl=args.get("nl"), title=args.get("title"),
         )
         return {"structuredContent": model}

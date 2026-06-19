@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Query plan</title>
+<style>
+  /* ---- design tokens (shared with the join diagram) ------------------- */
+  :root {
+    --bg: #f8fafc; --surface: #ffffff; --surface-alt: #f1f5f9; --surface-subtle: #f8fafc;
+    --border: #e2e8f0; --border-strong: #cbd5e1;
+    --text: #1e293b; --text-strong: #0f172a; --text-muted: #64748b;
+    --shadow: 0 4px 20px rgba(15,23,42,0.08);
+    --badge-bg: #f8fafc; --badge-border: #cbd5e1; --badge-text: #334155;
+    --lane-band: rgba(148,163,184,0.10); --lane-line: rgba(148,163,184,0.30);
+    --mark: #fde68a; --mark-strong: #f59e0b;
+    --sql-bg: #0f172a; --sql-text: #e2e8f0;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Cascadia Mono", Menlo, Consolas, monospace;
+    --sans: var(--mcp-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0b1220; --surface: #111827; --surface-alt: #0f172a; --surface-subtle: #111827;
+    --border: #243041; --border-strong: #334155;
+    --text: #e5edf7; --text-strong: #f8fafc; --text-muted: #94a3b8;
+    --shadow: 0 10px 30px rgba(2,6,23,0.45);
+    --badge-bg: #111827; --badge-border: #475569; --badge-text: #e5edf7;
+    --lane-band: rgba(148,163,184,0.07); --lane-line: rgba(148,163,184,0.22);
+    --mark: #92400e; --mark-strong: #f59e0b; --sql-bg: #0b1220; --sql-text: #e2e8f0;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    display: flex; flex-direction: column; min-height: 520px;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+
+  /* ---- header -------------------------------------------------------- */
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 20px 12px; }
+  .h-row { display: flex; align-items: baseline; gap: 10px; }
+  .page-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-strong); letter-spacing: -.01em; }
+  .h-spacer { flex: 1; }
+  .app-badge { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+  .page-subtitle { margin: 4px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+  /* ---- toolbar ------------------------------------------------------- */
+  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 20px;
+    border-bottom: 1px solid var(--border); background: var(--surface); }
+  .toolbar .group { display: inline-flex; align-items: center; gap: 6px; }
+  .toolbar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+  .zoom-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--badge-text); font-size: 17px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0; }
+  .zoom-btn:hover { background: var(--surface-subtle); border-color: var(--border-strong); }
+  .zoom-btn:disabled { opacity: .35; cursor: not-allowed; }
+  .zoom-label { min-width: 40px; text-align: center; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+  .chip { font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 9999px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+  .chip:hover { border-color: var(--border-strong); background: var(--surface-subtle); }
+  .chip.on { background: var(--surface-alt); color: var(--text-strong); border-color: var(--border-strong); }
+  .chip.off { opacity: .55; }
+
+  /* ---- legend (lanes) ------------------------------------------------ */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 4px; }
+  .legend-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 9999px;
+    font-size: 11px; font-weight: 600; background: var(--badge-bg); border: 1px solid var(--badge-border);
+    color: var(--badge-text); cursor: pointer; overflow-wrap: anywhere; }
+  .legend-badge:hover { border-color: var(--border-strong); }
+  .legend-badge.active { box-shadow: 0 0 0 2px var(--mark-strong); }
+  .legend-badge.dim { opacity: .4; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+  /* ---- stage (pan + zoom) -------------------------------------------- */
+  #stage { flex: 1; min-height: 280px; position: relative; overflow: hidden; cursor: grab;
+    background-color: var(--bg);
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 24px 24px; }
+  #stage.panning { cursor: grabbing; }
+  #diagram-wrapper { position: absolute; top: 0; left: 0; transform-origin: top left; }
+  #connector-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; z-index: 0; }
+
+  /* lane band sits behind the operator boxes */
+  .lane-band { position: absolute; border-radius: 14px; background: var(--lane-band);
+    border: 1px dashed var(--lane-line); z-index: 0; }
+  .lane-header { position: absolute; z-index: 1; display: flex; flex-direction: column; gap: 4px;
+    padding: 10px 12px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow);
+    border: 1px solid var(--border); border-left: 4px solid var(--border-strong); cursor: pointer;
+    transition: opacity .15s; }
+  .lane-header.dim { opacity: .3; }
+  .lane-header .lane-kind { align-self: flex-start; font-size: 9px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: #fff; padding: 2px 7px; border-radius: 9999px; }
+  .lane-header .lane-name { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text-strong);
+    overflow-wrap: anywhere; }
+  .lane-header .lane-meta { font-size: 10.5px; color: var(--text-muted); }
+  .lane-header .lane-caret { position: absolute; top: 9px; right: 10px; font-size: 9px; color: var(--text-muted); }
+
+  /* operator box */
+  .op-box { position: absolute; width: 212px; background: var(--surface); border-radius: 12px; overflow: hidden;
+    box-shadow: var(--shadow); cursor: grab; z-index: 1; border: 1px solid var(--border);
+    transition: opacity .15s, box-shadow .15s; }
+  .op-box.dim { opacity: .26; }
+  .op-box.focused { box-shadow: 0 0 0 3px var(--mark-strong), var(--shadow); }
+  .op-box.dragging { cursor: grabbing; z-index: 6; transition: none;
+    box-shadow: 0 0 0 3px var(--mark-strong), var(--shadow); }
+  .op-head { display: flex; align-items: center; gap: 7px; padding: 8px 11px; color: #fff; }
+  .op-head .op-type { font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+    background: rgba(255,255,255,.25); padding: 2px 6px; border-radius: 5px; white-space: nowrap; }
+  .op-head .op-title { font-family: var(--mono); font-size: 11.5px; font-weight: 700; overflow-wrap: anywhere; flex: 1; }
+  .op-head .op-badge { font-size: 9px; font-weight: 700; background: rgba(255,255,255,.9); color: #0f172a;
+    padding: 1px 6px; border-radius: 9999px; white-space: nowrap; }
+  .op-body { padding: 8px 11px 10px; }
+  .op-line { font-family: var(--mono); font-size: 10.5px; line-height: 1.5; color: var(--text);
+    overflow-wrap: anywhere; padding: 1px 0; }
+  .op-line + .op-line { border-top: 1px dotted var(--border); }
+  .op-src { margin-top: 6px; font-size: 10px; font-weight: 600; color: var(--text-muted); }
+  .op-empty { font-size: 10.5px; font-style: italic; color: var(--text-muted); }
+  body[data-hide-detail] .op-body { display: none; }
+
+  /* ---- query source -------------------------------------------------- */
+  .query-source { border-top: 1px solid var(--border); background: var(--surface); padding: 14px 20px 18px; }
+  .qs-head { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); margin-bottom: 10px; }
+  details.qs { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  details.qs[open] { border-color: var(--border-strong); }
+  details.qs summary { display: flex; align-items: center; gap: 10px; padding: 11px 14px; font-size: 12.5px;
+    font-weight: 600; color: var(--badge-text); background: var(--surface-subtle); cursor: pointer;
+    user-select: none; list-style: none; }
+  details.qs summary::-webkit-details-marker { display: none; }
+  details.qs summary::before { content: '▶'; font-size: 9px; color: var(--text-muted); transition: transform .15s; }
+  details.qs[open] summary::before { transform: rotate(90deg); }
+  details.qs summary .qs-label { flex: 1; }
+  details.qs summary .qs-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 9999px;
+    background: var(--surface-alt); color: var(--text-muted); }
+  details.qs summary .copy-sql { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+  details.qs summary .copy-sql:hover { border-color: var(--border-strong); color: var(--text); }
+  .qs-body { padding: 14px; background: var(--surface); border-top: 1px solid var(--border); }
+  .qs-nl { font-size: 13.5px; line-height: 1.6; color: var(--text); font-style: italic; margin: 0; }
+  pre.sql { margin: 0; padding: 15px; background: var(--sql-bg); border-radius: 8px; overflow-x: auto;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--sql-text); white-space: pre; }
+  pre.sql mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
+  pre.sql mark.strong { background: var(--mark-strong); color: #1a1300; }
+  textarea.sql-edit { width: 100%; min-height: 220px; resize: vertical; box-sizing: border-box;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; padding: 12px; border-radius: 8px;
+    border: 1px solid var(--border-strong); background: var(--sql-bg); color: var(--sql-text); }
+  .edit-bar { display: flex; gap: 8px; margin-top: 8px; }
+
+  /* ---- footer -------------------------------------------------------- */
+  footer { border-top: 1px solid var(--border); padding: 9px 20px; display: flex; align-items: center; gap: 12px;
+    background: var(--surface); }
+  #status { font-size: 11.5px; color: var(--text-muted); flex: 1; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  #status.err { color: #b3402e; }
+
+  @media (prefers-reduced-motion: reduce) { *, .op-box { transition: none !important; } }
+</style>
+</head>
+<body>
+  <header>
+    <div class="h-row">
+      <h1 class="page-title" id="page-title">Query plan</h1>
+      <span class="h-spacer"></span>
+      <span class="app-badge">MCP App</span>
+    </div>
+    <p class="page-subtitle" id="page-subtitle"></p>
+  </header>
+
+  <div class="toolbar">
+    <div class="group">
+      <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
+      <span class="zoom-label" id="zoom-label">100%</span>
+      <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
+      <button class="chip" id="zoom-reset" title="Zoom to fit the whole plan">Fit</button>
+      <button class="chip" id="reset-view" title="Restore the auto-layout, zoom and focus">Reset view</button>
+    </div>
+    <div class="sep"></div>
+    <div class="group">
+      <button class="chip on" id="t-detail" data-sec="detail">Detail</button>
+      <button class="chip" id="collapse-all" title="Collapse / expand every lane">Collapse lanes</button>
+    </div>
+    <div class="sep"></div>
+    <div class="group">
+      <button class="chip" id="export-png">Export PNG</button>
+      <button class="chip" id="export-svg">Export SVG</button>
+      <button class="chip" id="theme-toggle">Dark</button>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <div id="stage">
+    <div id="diagram-wrapper">
+      <svg id="connector-svg" aria-hidden="true"></svg>
+    </div>
+  </div>
+
+  <div class="query-source">
+    <div class="qs-head">Query source</div>
+    <details class="qs" id="qs-nl">
+      <summary><span class="qs-label">Natural-language prompt</span><span class="qs-tag">NL</span></summary>
+      <div class="qs-body"><p class="qs-nl" id="nl-text"></p></div>
+    </details>
+    <details class="qs" id="qs-sql">
+      <summary><span class="qs-label">Generated SQL</span>
+        <button class="copy-sql" id="edit-sql" title="Edit &amp; re-parse">Edit</button>
+        <button class="copy-sql" id="copy-sql" title="Copy SQL">Copy</button>
+        <span class="qs-tag" id="sql-tag">SQL</span></summary>
+      <div class="qs-body"><pre class="sql" id="sql-text"></pre></div>
+    </details>
+  </div>
+
+  <footer>
+    <span id="status">Loading…</span>
+    <button class="chip" id="clear-focus" style="display:none">Clear focus</button>
+  </footer>
+
+  <script type="module" src="/src/query-plan-app.ts"></script>
+</body>
+</html>

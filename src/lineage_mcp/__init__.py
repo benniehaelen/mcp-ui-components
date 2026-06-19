@@ -13,3 +13,4 @@ __version__ = "0.1.0"
 
 WIDGET_URI = "ui://lineage/viewer.html"
 JOIN_WIDGET_URI = "ui://lineage/join-diagram.html"
+QUERY_PLAN_URI = "ui://lineage/query-plan.html"

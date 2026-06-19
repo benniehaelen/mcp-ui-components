@@ -8,7 +8,9 @@
     "build": "cross-env INPUT=index.html vite build",
     "watch": "cross-env INPUT=index.html vite build --watch",
     "build:join": "cross-env INPUT=join-diagram.html vite build",
-    "watch:join": "cross-env INPUT=join-diagram.html vite build --watch"
+    "watch:join": "cross-env INPUT=join-diagram.html vite build --watch",
+    "build:plan": "cross-env INPUT=query-plan.html vite build",
+    "watch:plan": "cross-env INPUT=query-plan.html vite build --watch"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.0",
