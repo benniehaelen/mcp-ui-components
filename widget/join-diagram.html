@@ -134,25 +134,29 @@
   body[data-hide-derived]  .sec-derived  { display: none; }
   body[data-hide-filters]  .sec-filters  { display: none; }
 
-  /* ---- query source -------------------------------------------------- */
-  .query-source { border-top: 1px solid var(--border); background: var(--surface); padding: 14px 20px 18px; }
-  .qs-head { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
-    color: var(--text-muted); margin-bottom: 10px; }
-  details.qs { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
-  details.qs[open] { border-color: var(--border-strong); }
-  details.qs summary { display: flex; align-items: center; gap: 10px; padding: 11px 14px; font-size: 12.5px;
-    font-weight: 600; color: var(--badge-text); background: var(--surface-subtle); cursor: pointer;
-    user-select: none; list-style: none; }
-  details.qs summary::-webkit-details-marker { display: none; }
-  details.qs summary::before { content: '▶'; font-size: 9px; color: var(--text-muted); transition: transform .15s; }
-  details.qs[open] summary::before { transform: rotate(90deg); }
-  details.qs summary .qs-label { flex: 1; }
-  details.qs summary .qs-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 9999px;
-    background: var(--surface-alt); color: var(--text-muted); }
-  details.qs summary .copy-sql { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 7px;
-    border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; }
-  details.qs summary .copy-sql:hover { border-color: var(--border-strong); color: var(--text); }
-  .qs-body { padding: 14px; background: var(--surface); border-top: 1px solid var(--border); }
+  /* ---- query source (slim bottom drawer) ----------------------------- */
+  /* Collapsed by default so the diagram gets the height; opening it expands
+     the NL prompt + SQL, which the flex stage above yields room for. */
+  details.query-drawer { border-top: 1px solid var(--border); background: var(--surface); }
+  details.query-drawer > summary { display: flex; align-items: center; gap: 8px; padding: 9px 20px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); cursor: pointer; user-select: none; list-style: none; }
+  details.query-drawer > summary::-webkit-details-marker { display: none; }
+  details.query-drawer > summary::before { content: '▶'; font-size: 9px; transition: transform .15s; }
+  details.query-drawer[open] > summary::before { transform: rotate(90deg); }
+  .qd-spacer { flex: 1; }
+  .qd-tags { display: inline-flex; gap: 5px; }
+  .qd-tags .qs-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 9999px;
+    letter-spacing: normal; text-transform: none; background: var(--surface-alt); color: var(--text-muted); }
+  .copy-sql { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 7px; letter-spacing: normal;
+    text-transform: none; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+    cursor: pointer; }
+  .copy-sql:hover { border-color: var(--border-strong); color: var(--text); }
+  .qd-body { max-height: 42vh; overflow: auto; padding: 2px 20px 16px;
+    border-top: 1px solid var(--border); background: var(--surface); }
+  .qd-section { margin-top: 14px; }
+  .qd-sec-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); margin-bottom: 7px; }
   .qs-nl { font-size: 13.5px; line-height: 1.6; color: var(--text); font-style: italic; margin: 0; }
   pre.sql { margin: 0; padding: 15px; background: var(--sql-bg); border-radius: 8px; overflow-x: auto;
     font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--sql-text); white-space: pre; }
@@ -213,20 +217,25 @@
     </div>
   </div>
 
-  <div class="query-source">
-    <div class="qs-head">Query source</div>
-    <details class="qs" id="qs-nl">
-      <summary><span class="qs-label">Natural-language prompt</span><span class="qs-tag">NL</span></summary>
-      <div class="qs-body"><p class="qs-nl" id="nl-text"></p></div>
-    </details>
-    <details class="qs" id="qs-sql">
-      <summary><span class="qs-label">Generated SQL</span>
-        <button class="copy-sql" id="edit-sql" title="Edit &amp; re-parse">Edit</button>
-        <button class="copy-sql" id="copy-sql" title="Copy SQL">Copy</button>
-        <span class="qs-tag" id="sql-tag">SQL</span></summary>
-      <div class="qs-body"><pre class="sql" id="sql-text"></pre></div>
-    </details>
-  </div>
+  <details class="query-drawer" id="qs-drawer">
+    <summary>
+      <span class="qd-label">Query source</span>
+      <span class="qd-tags"><span class="qs-tag" id="nl-tag">NL</span><span class="qs-tag" id="sql-tag">SQL</span></span>
+      <span class="qd-spacer"></span>
+      <button class="copy-sql" id="edit-sql" title="Edit &amp; re-parse">Edit</button>
+      <button class="copy-sql" id="copy-sql" title="Copy SQL">Copy</button>
+    </summary>
+    <div class="qd-body">
+      <div class="qd-section" id="qs-nl">
+        <div class="qd-sec-label">Natural-language prompt</div>
+        <p class="qs-nl" id="nl-text"></p>
+      </div>
+      <div class="qd-section" id="qs-sql">
+        <div class="qd-sec-label">Generated SQL</div>
+        <div class="qd-sql"><pre class="sql" id="sql-text"></pre></div>
+      </div>
+    </div>
+  </details>
 
   <footer>
     <span id="status">Loading…</span>

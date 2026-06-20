@@ -49,9 +49,9 @@ const PORT_SPACING = 18;
 
 // layout geometry (CARD_W must match .table-card width in the CSS)
 const CARD_W = 320;
-const COL_GAP = 110;   // horizontal space between layers
-const ROW_GAP = 30;    // vertical space between stacked cards in a layer
-const PAD = 40;        // inset from the wrapper edge
+const COL_GAP = 150;   // horizontal space between layers
+const ROW_GAP = 64;    // vertical space between stacked cards in a layer
+const PAD = 56;        // inset from the wrapper edge
 const MIN_ZOOM = 0.25; // allow big diagrams to fully fit on screen
 
 // ---- element refs ---------------------------------------------------------
@@ -126,7 +126,8 @@ function render(m: Model) {
   // query source
   const nl = m.nl || "";
   $("nl-text").textContent = nl || "No natural-language prompt provided.";
-  (document.getElementById("qs-nl") as HTMLDetailsElement).style.display = nl ? "" : "none";
+  (document.getElementById("qs-nl") as HTMLElement).style.display = nl ? "" : "none";
+  (document.getElementById("nl-tag") as HTMLElement).style.display = nl ? "" : "none";
   $("sql-tag").textContent = (m.dialect || "sql").toUpperCase();
   renderSql();
 
@@ -290,7 +291,7 @@ function highlightSql(terms: string[], strong: boolean, open: boolean) {
   sqlEl.innerHTML = escapeHtml(model.sql).replace(
     re, (m) => `<mark${strong ? ' class="strong"' : ""}>${m}</mark>`);
   if (open) {
-    (document.getElementById("qs-sql") as HTMLDetailsElement).open = true;
+    (document.getElementById("qs-drawer") as HTMLDetailsElement).open = true;
     const first = sqlEl.querySelector("mark");
     if (first) first.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
@@ -538,7 +539,8 @@ function fit() {
   wrapper.style.transform = "none";
   const sw = stage.clientWidth, sh = stage.clientHeight;
   const ww = wrapper.scrollWidth, wh = wrapper.scrollHeight;
-  const z = Math.min(1, (sw - 24) / ww, (sh - 24) / wh);
+  const FIT_MARGIN = 56;   // breathing room around the framed diagram
+  const z = Math.min(1, (sw - FIT_MARGIN) / ww, (sh - FIT_MARGIN) / wh);
   // Fit must be able to zoom out further than the manual MIN_ZOOM floor, or a
   // tall diagram (e.g. a star of big cards) overflows the stage and the bottom
   // cards get clipped — looking like fewer tables than there really are.
@@ -658,7 +660,7 @@ $("edit-sql").addEventListener("click", (e) => { e.preventDefault(); e.stopPropa
 function openEditor() {
   if (editing || !model) return;
   editing = true;
-  (document.getElementById("qs-sql") as HTMLDetailsElement).open = true;
+  (document.getElementById("qs-drawer") as HTMLDetailsElement).open = true;
   const body = sqlEl.parentElement!;
   const ta = document.createElement("textarea");
   ta.className = "sql-edit"; ta.value = model.sql; ta.spellcheck = false;

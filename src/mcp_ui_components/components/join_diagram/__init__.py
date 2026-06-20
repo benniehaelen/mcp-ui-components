@@ -144,10 +144,7 @@ def _export_join_diagram(args: dict) -> dict:
     model = _provider.join_diagram(
         sql=args.get("sql"), nl=args.get("nl"), title=args.get("title"),
     )
-    return write_standalone_html(
-        _join_html(), model,
-        args.get("title") or model.get("title") or "join-diagram",
-    )
+    return write_standalone_html(_join_html(), model, "join-diagram")
 
 
 HANDLERS = {

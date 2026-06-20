@@ -148,10 +148,7 @@ def _export_query_plan(args: dict) -> dict:
     model = _provider.query_plan(
         sql=args.get("sql"), nl=args.get("nl"), title=args.get("title"),
     )
-    return write_standalone_html(
-        _query_plan_html(), model,
-        args.get("title") or model.get("title") or "query-plan",
-    )
+    return write_standalone_html(_query_plan_html(), model, "query-plan")
 
 
 HANDLERS = {
