@@ -124,8 +124,23 @@ def profile_query(
     op_total = sum(op_counts.values())
     block_count = len(scopes)
 
-    # heuristic complexity: tables + joins (weighted) + operators + CTE lanes
-    score = len(tables) + 2 * join_total + op_total + 2 * max(0, block_count - 1)
+    # heuristic complexity, broken into the factors that add up to the score so
+    # the widget can show exactly where each point comes from (no recomputation
+    # of the weights on the client). Zero-point factors are dropped; biggest first.
+    extra_lanes = max(0, block_count - 1)
+    factors = [
+        {"key": "operators", "label": "Operators", "points": op_total,
+         "detail": f"{op_total} logical operators × 1"},
+        {"key": "joins", "label": "Joins", "points": 2 * join_total,
+         "detail": f"{join_total} joins × 2"},
+        {"key": "lanes", "label": "CTE lanes", "points": 2 * extra_lanes,
+         "detail": f"{extra_lanes} CTE/subquery lanes × 2"},
+        {"key": "tables", "label": "Tables", "points": len(tables),
+         "detail": f"{len(tables)} tables × 1"},
+    ]
+    factors = sorted((f for f in factors if f["points"] > 0),
+                     key=lambda f: -f["points"])
+    score = sum(f["points"] for f in factors)
     label = "Low" if score <= 10 else "Medium" if score <= 24 else "High"
 
     ds_counts = Counter(
@@ -151,5 +166,5 @@ def profile_query(
         "blockCount": block_count,
         "operatorCount": op_total,
         "operatorCounts": {k: op_counts[k] for k in _OP_ORDER if op_counts.get(k)},
-        "complexity": {"score": score, "label": label},
+        "complexity": {"score": score, "label": label, "factors": factors},
     }

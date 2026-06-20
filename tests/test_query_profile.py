@@ -48,6 +48,17 @@ def test_complexity_scored_and_labelled(model):
     assert model["complexity"]["label"] == "High"
 
 
+def test_complexity_factors_sum_to_score(model):
+    cx = model["complexity"]
+    factors = cx["factors"]
+    # the breakdown the widget renders must add up to the badge number
+    assert sum(f["points"] for f in factors) == cx["score"]
+    # biggest contributor first, and no zero-point rows
+    assert all(f["points"] > 0 for f in factors)
+    assert [f["points"] for f in factors] == sorted((f["points"] for f in factors), reverse=True)
+    assert {f["label"] for f in factors} == {"Operators", "Joins", "CTE lanes", "Tables"}
+
+
 def test_metadata(model):
     assert model["dataset"] == "analytics-prod.clinical_core"
     assert model["scan"] == "549.2 GB"

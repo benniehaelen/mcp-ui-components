@@ -26,7 +26,10 @@ type Model = {
   scan: string | null; period: { start: string; end: string } | null;
   tableCount: number; joinCounts: Record<string, number>; joinTotal: number;
   blockCount: number; operatorCount: number; operatorCounts: Record<string, number>;
-  complexity: { score: number; label: string };
+  complexity: {
+    score: number; label: string;
+    factors: { key: string; label: string; points: number; detail: string }[];
+  };
 };
 
 // Per-join-type colours (mirror the diagram palette).
@@ -51,24 +54,46 @@ function setStatus(text: string, isErr = false) {
   statusEl.className = isErr ? "err" : "";
 }
 
-function tile(num: number, label: string): string {
-  return `<div class="tile"><div class="num">${num}</div><div class="lbl">${label}</div></div>`;
+function tile(num: number, label: string, hint: string): string {
+  return `<div class="tile" title="${escapeHtml(hint)}"><div class="num">${num}</div><div class="lbl">${label}</div></div>`;
 }
 
-// One labelled bar; width is value / max so the longest bar fills the track.
-function barRow(name: string, value: number, max: number, color: string): string {
+// One labelled bar; width is value / max so the longest bar in the group fills
+// the track. The count is printed on the right; `tip` spells the bar out on hover.
+function barRow(name: string, value: number, max: number, color: string, tip: string): string {
   const pct = max > 0 ? Math.max(4, Math.round((value / max) * 100)) : 0;
-  return `<div class="bar-row">
-    <span class="bar-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+  return `<div class="bar-row" title="${escapeHtml(tip)}">
+    <span class="bar-name">${escapeHtml(name)}</span>
     <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:${color}"></span></span>
     <span class="bar-val">${value}</span>
   </div>`;
 }
 
-function renderBars(el: HTMLElement, entries: [string, number][], colorFor: (k: string) => string) {
+function renderBars(
+  el: HTMLElement,
+  entries: [string, number][],
+  colorFor: (k: string) => string,
+  tipFor: (k: string, n: number) => string,
+  denom?: number,
+) {
   if (!entries.length) { el.innerHTML = `<span class="empty-note">none</span>`; return; }
-  const max = Math.max(...entries.map(([, n]) => n));
-  el.innerHTML = entries.map(([k, n]) => barRow(k, n, max, colorFor(k))).join("");
+  // Normalize to `denom` (e.g. the total score) so the bars are a true share of
+  // it; otherwise to the largest value so the biggest bar fills the track.
+  const max = denom || Math.max(...entries.map(([, n]) => n));
+  el.innerHTML = entries.map(([k, n]) => barRow(k, n, max, colorFor(k), tipFor(k, n))).join("");
+}
+
+// Compact "name N" pills — composition detail that doesn't roll up into the score.
+function renderChips(
+  el: HTMLElement,
+  entries: [string, number][],
+  dotFor?: (k: string) => string,
+) {
+  if (!entries.length) { el.innerHTML = `<span class="empty-note">none</span>`; return; }
+  el.innerHTML = entries.map(([k, n]) => {
+    const dot = dotFor ? `<span class="dot" style="background:${dotFor(k)}"></span>` : "";
+    return `<span class="kv">${dot}${escapeHtml(k)} <b>${n}</b></span>`;
+  }).join("");
 }
 
 // ---- render ---------------------------------------------------------------
@@ -82,7 +107,7 @@ function render(m: Model) {
   ].filter(Boolean);
   $("page-subtitle").textContent = parts.join("  ·  ");
 
-  const cx = m.complexity || { score: 0, label: "—" };
+  const cx = m.complexity || { score: 0, label: "—", factors: [] };
   const badge = $("complexity");
   badge.textContent = `Complexity: ${cx.label}` + (cx.score ? ` (${cx.score})` : "");
   badge.className = "complexity " + (cx.label || "").toLowerCase();
@@ -90,20 +115,35 @@ function render(m: Model) {
   $("scan-line").textContent = m.scan ? `Scan ${m.scan}` : "";
 
   $("tiles").innerHTML =
-    tile(m.tableCount, "Tables") +
-    tile(m.joinTotal, "Joins") +
-    tile(m.blockCount, m.blockCount === 1 ? "Lane" : "Lanes") +
-    tile(m.operatorCount, "Operators");
+    tile(m.tableCount, "Tables", "Distinct physical tables referenced (CTE names don't count)") +
+    tile(m.joinTotal, "Joins", "Total join operations in the query") +
+    tile(m.blockCount, m.blockCount === 1 ? "Lane" : "Lanes",
+      "Execution lanes: each CTE / subquery, plus the main query") +
+    tile(m.operatorCount, "Operators", "Total logical operators across all lanes");
 
+  // Complexity breakdown: each bar is one factor's POINTS, normalized to the
+  // total score so the bars literally add up to the badge number.
+  const factors = cx.factors || [];
   renderBars(
-    $("join-bars"),
+    $("cx-bars"),
+    factors.map((f) => [f.label, f.points] as [string, number]),
+    () => "var(--accent)",
+    (label) => {
+      const f = factors.find((x) => x.label === label);
+      return f ? `${f.detail} = ${f.points} pts` : "";
+    },
+    cx.score || undefined,
+  );
+  $("cx-total").textContent = factors.length
+    ? `Score ${cx.score} = ${factors.map((f) => f.points).join(" + ")}  ·  ${cx.label}`
+    : "";
+
+  // Composition detail (not part of the score) — compact pills.
+  renderChips($("op-chips"), Object.entries(m.operatorCounts || {}));
+  renderChips(
+    $("join-chips"),
     Object.entries(m.joinCounts || {}),
     (k) => JOIN_COLORS[k.toUpperCase()] || "#06b6d4",
-  );
-  renderBars(
-    $("op-bars"),
-    Object.entries(m.operatorCounts || {}),
-    () => "var(--accent)",
   );
 
   const nl = m.nl || "";
