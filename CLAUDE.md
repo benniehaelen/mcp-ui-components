@@ -5,11 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A runnable reference implementation of **MCP Apps** (SEP-1865, spec 2026-01-26): one MCP
-server (`mcp-ui-components`) serves three interactive UI controls. A UI-enabled tool returns a
+server (`mcp-ui-components`) serves four interactive UI controls. A UI-enabled tool returns a
 result carrying `_meta.ui.resourceUri`; the host fetches the named `ui://` resource and renders it
 in a sandboxed iframe; every widget interaction is proxied back through the host as a *governed
-MCP tool call* (same auth/guardrails/traces as a prompt). The three controls are the **lineage
-viewer**, the **SQL join diagram**, and the **query plan**.
+MCP tool call* (same auth/guardrails/traces as a prompt). The controls are the **lineage
+viewer**, the **SQL join diagram**, the **query plan**, and the **query profile** (a small
+parse-derived analytic card).
 
 ## Commands
 
@@ -71,6 +72,9 @@ content must use MIME type `text/html;profile=mcp-app` (`RESOURCE_MIME_TYPE`, de
   `parse_join_sql` (re-parses edited SQL). `sql.py` parser via `JoinDiagramProvider`.
 - Query plan (`components/query_plan/`): `view_query_plan` → `query-plan.html` → `parse_query_plan`.
   `sql.py` parser via `QueryPlanProvider`.
+- Query profile (`components/query_profile/`): `view_query_profile` → `query-profile.html` →
+  `parse_query_profile`. `sql.py` computes parse-derived analytics (table/join/operator counts,
+  complexity) via `QueryProfileProvider`; no export tool. Build with `npm run build:profile`.
 - Export (`export_join_diagram` / `export_query_plan`): `shared/export.py:write_standalone_html`
   writes a self-contained interactive HTML — the widget bundle with the parsed model injected as
   `window.__MCP_MODEL__`, so it renders in a plain browser with no host. Export lives *outside* the
@@ -104,11 +108,12 @@ src/mcp_ui_components/
   server.py       real MCP server (stdio + streamable HTTP)
   shared/         sql.py (AST helpers + palette) · examples.py (seed SQL) · export.py
   components/
-    lineage/      __init__.py (tools+dispatch) · provider.py · data.py
-    join_diagram/ __init__.py · provider.py · sql.py (SQL -> join model)
-    query_plan/   __init__.py · provider.py · sql.py (SQL -> query-plan model)
+    lineage/       __init__.py (tools+dispatch) · provider.py · data.py
+    join_diagram/  __init__.py · provider.py · sql.py (SQL -> join model)
+    query_plan/    __init__.py · provider.py · sql.py (SQL -> query-plan model)
+    query_profile/ __init__.py · provider.py · sql.py (SQL -> profile analytics)
   widgets/*.html  committed build outputs
 widget/           TypeScript widget source (Vite single-file builds; flat)
 demo/host.py      offline launcher; demo/_vendor_host/ = MIT prebuilt reference host
-tests/            test_provider.py, test_join_model.py, test_query_plan.py
+tests/            test_provider.py, test_join_model.py, test_query_plan.py, test_query_profile.py
 ```

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Query profile</title>
+<style>
+  /* ---- design tokens (shared with the other controls) ---------------- */
+  :root {
+    --bg: #f8fafc; --surface: #ffffff; --surface-alt: #f1f5f9; --surface-subtle: #f8fafc;
+    --border: #e2e8f0; --border-strong: #cbd5e1;
+    --text: #1e293b; --text-strong: #0f172a; --text-muted: #64748b;
+    --shadow: 0 4px 20px rgba(15,23,42,0.08);
+    --accent: #3b82f6; --track: #e2e8f0;
+    --ok-bg: #dcfce7; --ok-text: #166534; --ok-border: #86efac;
+    --warn-bg: #fef9c3; --warn-text: #854d0e; --warn-border: #fde047;
+    --hot-bg: #fee2e2; --hot-text: #991b1b; --hot-border: #fca5a5;
+    --sql-bg: #0f172a; --sql-text: #e2e8f0;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: var(--mcp-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0b1220; --surface: #111827; --surface-alt: #0f172a; --surface-subtle: #111827;
+    --border: #243041; --border-strong: #334155;
+    --text: #e5edf7; --text-strong: #f8fafc; --text-muted: #94a3b8;
+    --shadow: 0 10px 30px rgba(2,6,23,0.45);
+    --accent: #60a5fa; --track: #243041;
+    --ok-bg: #14321f; --ok-text: #86efac; --ok-border: #166534;
+    --warn-bg: #3a2f0c; --warn-text: #fde047; --warn-border: #854d0e;
+    --hot-bg: #3a1414; --hot-text: #fca5a5; --hot-border: #991b1b;
+    --sql-bg: #0b1220; --sql-text: #e2e8f0;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans);
+    display: flex; flex-direction: column; min-height: 420px;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+  /* ---- header -------------------------------------------------------- */
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 20px 12px; }
+  .h-row { display: flex; align-items: center; gap: 10px; }
+  .page-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-strong); letter-spacing: -.01em; }
+  .h-spacer { flex: 1; }
+  .app-badge { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+  .complexity { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+    border: 1px solid var(--border); background: var(--surface-alt); color: var(--text-muted); }
+  .complexity.low { background: var(--ok-bg); color: var(--ok-text); border-color: var(--ok-border); }
+  .complexity.medium { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
+  .complexity.high { background: var(--hot-bg); color: var(--hot-text); border-color: var(--hot-border); }
+  .page-subtitle { margin: 5px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+  /* ---- toolbar ------------------------------------------------------- */
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 20px;
+    border-bottom: 1px solid var(--border); background: var(--surface); }
+  .toolbar .muted { font-size: 11.5px; color: var(--text-muted); font-family: var(--mono); }
+  .chip { font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 9999px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+  .chip:hover { border-color: var(--border-strong); background: var(--surface-subtle); }
+
+  /* ---- card body ----------------------------------------------------- */
+  main { flex: 1; overflow: auto; padding: 16px 20px 8px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; box-shadow: var(--shadow); }
+  .tile .num { font-size: 26px; font-weight: 800; color: var(--text-strong); line-height: 1.1; letter-spacing: -.02em; }
+  .tile .lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); margin-top: 4px; }
+
+  .panel { margin-top: 16px; }
+  .section-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); margin: 0 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .bars { display: flex; flex-direction: column; gap: 7px; }
+  .bar-row { display: grid; grid-template-columns: 88px 1fr 30px; align-items: center; gap: 10px; }
+  .bar-name { font-size: 11.5px; font-weight: 600; color: var(--text); font-family: var(--mono);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { height: 10px; background: var(--track); border-radius: 999px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; background: var(--accent); min-width: 3px; transition: width .25s; }
+  .bar-val { font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .empty-note { color: var(--text-muted); font-size: 11.5px; font-style: italic; }
+
+  /* ---- query source (slim bottom drawer, shared pattern) ------------- */
+  details.query-drawer { border-top: 1px solid var(--border); background: var(--surface); }
+  details.query-drawer > summary { display: flex; align-items: center; gap: 8px; padding: 9px 20px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); cursor: pointer; user-select: none; list-style: none; }
+  details.query-drawer > summary::-webkit-details-marker { display: none; }
+  details.query-drawer > summary::before { content: '▶'; font-size: 9px; transition: transform .15s; }
+  details.query-drawer[open] > summary::before { transform: rotate(90deg); }
+  .qd-spacer { flex: 1; }
+  .qd-tags { display: inline-flex; gap: 5px; }
+  .qd-tags .qs-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 9999px;
+    letter-spacing: normal; text-transform: none; background: var(--surface-alt); color: var(--text-muted); }
+  .copy-sql { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 7px; letter-spacing: normal;
+    text-transform: none; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+  .copy-sql:hover { border-color: var(--border-strong); color: var(--text); }
+  .qd-body { max-height: 42vh; overflow: auto; padding: 2px 20px 16px;
+    border-top: 1px solid var(--border); background: var(--surface); }
+  .qd-section { margin-top: 14px; }
+  .qd-sec-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted); margin-bottom: 7px; }
+  .qs-nl { font-size: 13.5px; line-height: 1.6; color: var(--text); font-style: italic; margin: 0; }
+  pre.sql { margin: 0; padding: 15px; background: var(--sql-bg); border-radius: 8px; overflow-x: auto;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--sql-text); white-space: pre; }
+  textarea.sql-edit { width: 100%; min-height: 200px; resize: vertical; box-sizing: border-box;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; padding: 12px; border-radius: 8px;
+    border: 1px solid var(--border-strong); background: var(--sql-bg); color: var(--sql-text); }
+  .edit-bar { display: flex; gap: 8px; margin-top: 8px; }
+  .chip.on { background: var(--surface-alt); color: var(--text-strong); border-color: var(--border-strong); }
+
+  /* ---- footer -------------------------------------------------------- */
+  footer { border-top: 1px solid var(--border); padding: 9px 20px; background: var(--surface); }
+  #status { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #status.err { color: #b3402e; }
+
+  @media (prefers-reduced-motion: reduce) { *, .bar-fill { transition: none !important; } }
+</style>
+</head>
+<body>
+  <header>
+    <div class="h-row">
+      <h1 class="page-title" id="page-title">Query profile</h1>
+      <span class="h-spacer"></span>
+      <span class="complexity" id="complexity">—</span>
+      <span class="app-badge">MCP App</span>
+    </div>
+    <p class="page-subtitle" id="page-subtitle"></p>
+  </header>
+
+  <div class="toolbar">
+    <span class="muted" id="scan-line"></span>
+    <span class="h-spacer"></span>
+    <button class="chip" id="theme-toggle">Dark</button>
+  </div>
+
+  <main>
+    <div class="tiles" id="tiles"></div>
+    <div class="panel">
+      <div class="section-label">Join types</div>
+      <div class="bars" id="join-bars"></div>
+    </div>
+    <div class="panel">
+      <div class="section-label">Operator mix</div>
+      <div class="bars" id="op-bars"></div>
+    </div>
+  </main>
+
+  <details class="query-drawer" id="qs-drawer">
+    <summary>
+      <span class="qd-label">Query source</span>
+      <span class="qd-tags"><span class="qs-tag" id="nl-tag">NL</span><span class="qs-tag" id="sql-tag">SQL</span></span>
+      <span class="qd-spacer"></span>
+      <button class="copy-sql" id="edit-sql" title="Edit &amp; re-parse">Edit</button>
+      <button class="copy-sql" id="copy-sql" title="Copy SQL">Copy</button>
+    </summary>
+    <div class="qd-body">
+      <div class="qd-section" id="qs-nl">
+        <div class="qd-sec-label">Natural-language prompt</div>
+        <p class="qs-nl" id="nl-text"></p>
+      </div>
+      <div class="qd-section" id="qs-sql">
+        <div class="qd-sec-label">Generated SQL</div>
+        <div class="qd-sql"><pre class="sql" id="sql-text"></pre></div>
+      </div>
+    </div>
+  </details>
+
+  <footer><span id="status">Loading…</span></footer>
+
+  <script type="module" src="/src/query-profile-app.ts"></script>
+</body>
+</html>
