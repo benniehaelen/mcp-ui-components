@@ -1,13 +1,10 @@
 import { test, expect, type Frame, type Page } from "@playwright/test";
 
-// The six resolver steps that arrive lazily under resolve.pipeline.
-const RESOLVER_STEPS = [
-  "resolve.DateResolver",
-  "resolve.RecencyResolver",
-  "resolve.GrainResolver",
-  "resolve.ZoneRouter",
-  "resolve.BusinessRuleResolver",
-  "resolve.AuthorityReranker",
+// The three knowledge-graph lookups that arrive lazily under "Resolve Joins with KG".
+const KG_LOOKUPS = [
+  "kg.resolve.encounters",
+  "kg.resolve.patients",
+  "kg.resolve.stg_charges",
 ];
 
 // The widget renders inside a sandboxed iframe (its own origin via the sandbox
@@ -20,7 +17,7 @@ async function waterfallFrame(page: Page): Promise<Frame> {
       async () => {
         for (const frame of page.frames()) {
           try {
-            const count = await frame.locator(".name-text", { hasText: "resolve.pipeline" }).count();
+            const count = await frame.locator(".name-text", { hasText: "Resolve Joins with KG" }).count();
             if (count > 0) { found = frame; return true; }
           } catch {
             // frame detached mid-poll; ignore and retry
@@ -34,25 +31,25 @@ async function waterfallFrame(page: Page): Promise<Frame> {
   return found!;
 }
 
-test("view_trace_waterfall renders and expand_span_children reveals the six resolver spans", async ({ page }) => {
+test("view_trace_waterfall renders and expand_span_children reveals the knowledge-graph lookups", async ({ page }) => {
   await page.goto("/?tool=view_trace_waterfall&call=true");
 
   const frame = await waterfallFrame(page);
 
-  // The pipeline row is present; its six lazy children are not shown yet.
-  await expect(frame.locator(".name-text", { hasText: "resolve.pipeline" })).toBeVisible();
-  for (const step of RESOLVER_STEPS) {
-    await expect(frame.locator(".name-text", { hasText: step })).toHaveCount(0);
+  // The "Resolve Joins with KG" step is present; its lazy KG lookups are not yet shown.
+  await expect(frame.locator(".name-text", { hasText: "Resolve Joins with KG" })).toBeVisible();
+  for (const lookup of KG_LOOKUPS) {
+    await expect(frame.locator(".name-text", { hasText: lookup })).toHaveCount(0);
   }
 
-  // Click the + on resolve.pipeline -> proxied expand_span_children.
-  const pipelineRow = frame.locator(".row", {
-    has: frame.locator(".name-text", { hasText: "resolve.pipeline" }),
+  // Click the + on "Resolve Joins with KG" -> proxied expand_span_children.
+  const stepRow = frame.locator(".row", {
+    has: frame.locator(".name-text", { hasText: "Resolve Joins with KG" }),
   });
-  await pipelineRow.locator(".twirl").click();
+  await stepRow.locator(".twirl").click();
 
-  // All six resolver spans now appear.
-  for (const step of RESOLVER_STEPS) {
-    await expect(frame.locator(".name-text", { hasText: step })).toBeVisible();
+  // The three knowledge-graph lookups now appear.
+  for (const lookup of KG_LOOKUPS) {
+    await expect(frame.locator(".name-text", { hasText: lookup })).toBeVisible();
   }
 });

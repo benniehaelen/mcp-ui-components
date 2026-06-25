@@ -217,11 +217,22 @@ interactive controls in chat.
    | **Toggle the chip dimension** (latency / tokens / $) | re-color and re-scale the chips (local) |
    | **Reset view** | restore the initial waterfall (local) |
 
+   The waterfall has the request's twelve pipeline steps as its rows, in order:
+   **Discovery → Route Zones → Query Planning → Domain Disambiguation → Resolve
+   Joins with KG → Recency Resolution → Grain Resolution → Business Rules → Date
+   Resolution → Generate SQL → Validate (Dry Run) → Execute SQL**. `Generate SQL`
+   carries the Claude token cost; `Validate (Dry Run)` is a free BigQuery dry run
+   plus the SQ-001..SQ-012 guardrail evaluation; `Execute SQL` carries the billed
+   BigQuery bytes. `Resolve Joins with KG` ships with `has_lazy_children`, so its
+   three per-table knowledge-graph lookups arrive only when you expand it, via
+   `expand_span_children`.
+
    A details panel link such as **View lineage for fct_patient_visits** calls
    `view_lineage` through the host — the same governed round-trip, now jumping
    from the operational view to the lineage view. The seed data ships two traces:
-   a clean run, and one blocked at the guardrail stage (SQ-007), which renders
-   with a **Blocked** badge on the offending span.
+   a clean run, and one blocked at the dry-run validation step (SQ-007, direct
+   identifiers), which renders with a **Blocked** badge on the offending step and
+   never reaches `Execute SQL`.
 
    The trace provider is a Cloud Trace / BigQuery stand-in; the production adapter
    (OpenTelemetry `_AllSpans`, `mcp_usage_log`, `INFORMATION_SCHEMA.JOBS_BY_PROJECT`,

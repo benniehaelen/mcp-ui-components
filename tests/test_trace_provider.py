@@ -8,11 +8,15 @@ from mcp_ui_components.components.trace_waterfall.provider import (
     TraceProvider,
 )
 
-# The six resolver steps that arrive lazily under resolve.pipeline.
-RESOLVER_STEPS = {
-    "resolve.DateResolver", "resolve.RecencyResolver", "resolve.GrainResolver",
-    "resolve.ZoneRouter", "resolve.BusinessRuleResolver", "resolve.AuthorityReranker",
-}
+# The twelve pipeline steps, in order, that are the root's children.
+PIPELINE_STEPS = [
+    "Discovery", "Route Zones", "Query Planning", "Domain Disambiguation",
+    "Resolve Joins with KG", "Recency Resolution", "Grain Resolution",
+    "Business Rules", "Date Resolution", "Generate SQL", "Validate (Dry Run)",
+    "Execute SQL",
+]
+# The three knowledge-graph lookups that arrive lazily under "Resolve Joins with KG".
+KG_LOOKUPS = {"kg.resolve.encounters", "kg.resolve.patients", "kg.resolve.stg_charges"}
 
 
 def test_default_trace_is_most_recent():
@@ -21,30 +25,31 @@ def test_default_trace_is_most_recent():
     assert t["status"] == "ok"
 
 
-def test_initial_view_withholds_lazy_resolver_children():
+def test_initial_view_shows_twelve_steps_and_withholds_kg_lookups():
     t = TraceProvider().get_trace("trc_ok")
-    names = {s["name"] for s in t["spans"]}
-    # the six resolver steps are hidden until expand_span_children
-    assert names.isdisjoint(RESOLVER_STEPS)
-    assert "resolve.pipeline" in names
-    pipeline = next(s for s in t["spans"] if s["name"] == "resolve.pipeline")
-    assert pipeline["has_lazy_children"] is True
-    assert len(t["spans"]) == 6
+    names = [s["name"] for s in t["spans"]]
+    # the root plus all twelve pipeline steps, in order
+    assert names == ["nl_to_sql.request"] + PIPELINE_STEPS
+    # the lazy knowledge-graph lookups are hidden until expand_span_children
+    assert set(names).isdisjoint(KG_LOOKUPS)
+    step5 = next(s for s in t["spans"] if s["name"] == "Resolve Joins with KG")
+    assert step5["has_lazy_children"] is True
 
 
-def test_expand_reveals_exactly_the_six_resolver_spans():
+def test_expand_reveals_the_three_kg_lookups():
     p = TraceProvider()
     view = p.get_trace("trc_ok")
     visible = [s["span_id"] for s in view["spans"]]
-    exp = p.expand("s2", visible)
-    assert {s["name"] for s in exp["spans"]} == RESOLVER_STEPS
+    exp = p.expand("s5", visible)  # Resolve Joins with KG
+    assert {s["name"] for s in exp["spans"]} == KG_LOOKUPS
     # already-visible children are not re-added
-    again = p.expand("s2", visible + [s["span_id"] for s in exp["spans"]])
+    again = p.expand("s5", visible + [s["span_id"] for s in exp["spans"]])
     assert again["spans"] == []
 
 
-def test_describe_span_carries_otel_detail_and_links():
-    d = TraceProvider().describe_span("s4")  # bigquery.execute
+def test_describe_execute_sql_carries_otel_detail_and_links():
+    d = TraceProvider().describe_span("s12")  # Execute SQL
+    assert d["name"] == "Execute SQL"
     assert d["kind"] == "bigquery"
     assert d["attributes"]["db.system"] == "bigquery"
     assert d["attributes"]["bq.cache_hit"] is False
@@ -52,8 +57,9 @@ def test_describe_span_carries_otel_detail_and_links():
     assert d["links"][0]["args"]["node"] == "fct_patient_visits"
 
 
-def test_describe_guardrail_has_per_rule_events():
-    d = TraceProvider().describe_span("b3")  # the blocking guardrail span
+def test_validate_step_has_per_rule_guardrail_events():
+    d = TraceProvider().describe_span("b11")  # the blocking validate step
+    assert d["name"] == "Validate (Dry Run)"
     rule_ids = {e["guardrail.rule_id"] for e in d["events"]}
     assert "SQ-007" in rule_ids
     blocked = next(e for e in d["events"] if e["guardrail.rule_id"] == "SQ-007")
@@ -64,8 +70,8 @@ def test_describe_guardrail_has_per_rule_events():
     )
 
 
-def test_cost_breakdown_total_equals_claude_plus_bigquery_span_scope():
-    cb = TraceProvider().cost_breakdown("s5", "span")  # claude_api span
+def test_cost_breakdown_generate_sql_is_claude_only():
+    cb = TraceProvider().cost_breakdown("s10", "span")  # Generate SQL
     assert cb["scope"] == "span"
     assert cb["claude_api"]["cost_usd"] > 0
     assert cb["bigquery"]["cost_usd"] == 0
@@ -73,9 +79,17 @@ def test_cost_breakdown_total_equals_claude_plus_bigquery_span_scope():
         cb["claude_api"]["cost_usd"] + cb["bigquery"]["cost_usd"], 6)
 
 
+def test_cost_breakdown_validate_dry_run_is_free():
+    # The dry-run validation scans bytes but bills nothing.
+    cb = TraceProvider().cost_breakdown("s11", "span")  # Validate (Dry Run)
+    assert cb["bigquery"]["bytes_scanned"] > 0
+    assert cb["bigquery"]["bytes_billed"] == 0
+    assert cb["bigquery"]["cost_usd"] == 0
+
+
 def test_cost_breakdown_subtree_sums_claude_and_bigquery():
     cb = TraceProvider().cost_breakdown("s0", "subtree")  # whole request
-    # the subtree rolls up both the Claude format call and the BigQuery scan
+    # the subtree rolls up both the Generate SQL token cost and the Execute SQL scan
     assert cb["claude_api"]["cost_usd"] > 0
     assert cb["bigquery"]["cost_usd"] > 0
     assert cb["total_cost_usd"] == round(
@@ -86,7 +100,7 @@ def test_cost_breakdown_subtree_sums_claude_and_bigquery():
 
 
 def test_cost_breakdown_uses_provider_rate_cards():
-    cb = TraceProvider().cost_breakdown("s5", "span")
+    cb = TraceProvider().cost_breakdown("s10", "span")  # Generate SQL
     assert cb["claude_api"]["rate_card"]["in_per_mtok_usd"] == RATE_CARD["in_per_mtok_usd"]
     assert cb["bigquery"]["rate_per_tib_usd"] == BQ_RATE_PER_TIB_USD
     # uncached = total in - cached in
@@ -113,13 +127,13 @@ def test_list_recent_returns_both_traces_and_filters_by_status():
     assert [r["trace_id"] for r in blocked] == ["trc_blocked"]
 
 
-def test_blocked_trace_status_and_blocking_span():
+def test_blocked_trace_status_and_blocking_step():
     t = TraceProvider().get_trace("trc_blocked")
     assert t["status"] == "guardrail_blocked"
-    guardrail = next(s for s in t["spans"] if s["name"] == "guardrails.evaluate")
-    assert guardrail["status"] == "error"
-    # the blocked request never reaches BigQuery
-    assert "bigquery.execute" not in {s["name"] for s in t["spans"]}
+    validate = next(s for s in t["spans"] if s["name"] == "Validate (Dry Run)")
+    assert validate["status"] == "error"
+    # the blocked request never reaches Execute SQL
+    assert "Execute SQL" not in {s["name"] for s in t["spans"]}
 
 
 def test_unknown_trace_and_span_raise():
@@ -145,9 +159,9 @@ def test_expand_tool_dispatch():
     visible = [s["span_id"] for s in view["spans"]]
     r = tools.call_tool(
         "expand_span_children",
-        {"span_id": "s2", "visible_span_ids": visible},
+        {"span_id": "s5", "visible_span_ids": visible},
     )["structuredContent"]
-    assert {s["name"] for s in r["spans"]} == RESOLVER_STEPS
+    assert {s["name"] for s in r["spans"]} == KG_LOOKUPS
 
 
 def test_cost_breakdown_tool_dispatch():

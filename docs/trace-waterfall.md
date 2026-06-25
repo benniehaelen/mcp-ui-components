@@ -13,6 +13,23 @@ it inline, and every interaction is proxied back through the host as a governed
 MCP tool call, subject to the same auth, guardrails, and traces as a prompt. No
 interaction reaches Cloud Trace or BigQuery directly.
 
+The request root has the twelve pipeline steps as its children, in order:
+
+| # | Step | Kind | Notes |
+| --- | --- | --- | --- |
+| 1 | Discovery | embedding | vector search the top-k candidate tables |
+| 2 | Route Zones | resolver | pick the governed data zone to read from |
+| 3 | Query Planning | resolver | decompose the question into a plan |
+| 4 | Domain Disambiguation | resolver | map ambiguous terms to canonical fields |
+| 5 | Resolve Joins with KG | neo4j | resolve the join graph (lazy KG sub-lookups) |
+| 6 | Recency Resolution | resolver | pin the request to the latest load |
+| 7 | Grain Resolution | resolver | choose the group-by grain |
+| 8 | Business Rules | resolver | apply metric definitions (late plan) |
+| 9 | Date Resolution | resolver | rewrite the relative date window |
+| 10 | Generate SQL | claude_api | the LLM call that emits the SQL (token cost) |
+| 11 | Validate (Dry Run) | guardrail | BigQuery dry run + SQ-001..SQ-012 (billed nothing) |
+| 12 | Execute SQL | bigquery | the billed BigQuery run (bytes cost) |
+
 ## Interaction to proxied-call map
 
 | Interaction in the widget | Proxied call | Result |
@@ -37,15 +54,16 @@ The provider ships two traces so the picker, the lazy-expand path, and the error
 treatment are all demonstrable:
 
 - `trc_ok` - "average length of stay by facility for the last 90 days". A clean
-  run: embed, resolve, guardrails pass (SQ-001 through SQ-012), BigQuery executes,
-  Claude formats the response. The `resolve.pipeline` span carries
-  `has_lazy_children`, so its six resolver steps (DateResolver, RecencyResolver,
-  GrainResolver, ZoneRouter, BusinessRuleResolver, AuthorityReranker) arrive only
-  when the user expands it, via `expand_span_children`.
-- `trc_blocked` - blocked at the guardrail stage (SQ-007, no direct identifier
-  columns). Resolution still runs, but evaluation fails and the query is never
-  executed, so there is no `bigquery.execute` or `format.response` span. The widget
-  badges the blocking guardrail span and treats the trace as blocked.
+  run: all twelve steps execute end to end, the dry-run validation passes every
+  guardrail (SQ-001 through SQ-012), and `Execute SQL` runs. Step 5, `Resolve
+  Joins with KG`, carries `has_lazy_children`, so its three per-table
+  knowledge-graph lookups (`kg.resolve.encounters`, `kg.resolve.patients`,
+  `kg.resolve.stg_charges`) arrive only when the user expands it, via
+  `expand_span_children`.
+- `trc_blocked` - blocked at the dry-run validation step (SQ-007, no direct
+  identifier columns). The pipeline runs through `Generate SQL`, but `Validate
+  (Dry Run)` fails the guardrail, so `Execute SQL` never runs. The widget badges
+  the blocking step and treats the trace as blocked.
 
 ## Cost model
 
