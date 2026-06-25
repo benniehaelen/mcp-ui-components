@@ -12,7 +12,9 @@
     "build:plan": "cross-env INPUT=query-plan.html vite build",
     "watch:plan": "cross-env INPUT=query-plan.html vite build --watch",
     "build:profile": "cross-env INPUT=query-profile.html vite build",
-    "watch:profile": "cross-env INPUT=query-profile.html vite build --watch"
+    "watch:profile": "cross-env INPUT=query-profile.html vite build --watch",
+    "build:trace": "cross-env INPUT=trace-waterfall.html vite build",
+    "watch:trace": "cross-env INPUT=trace-waterfall.html vite build --watch"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.0",

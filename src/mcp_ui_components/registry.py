@@ -20,9 +20,15 @@ resource and renders it sandboxed.
 from __future__ import annotations
 
 from . import RESOURCE_MIME_TYPE  # re-exported for server.py
-from .components import join_diagram, lineage, query_plan, query_profile
+from .components import (
+    join_diagram,
+    lineage,
+    query_plan,
+    query_profile,
+    trace_waterfall,
+)
 
-_COMPONENTS = [lineage, join_diagram, query_plan, query_profile]
+_COMPONENTS = [lineage, join_diagram, query_plan, query_profile, trace_waterfall]
 
 TOOLS = [tool for c in _COMPONENTS for tool in c.TOOLS]
 RESOURCES = [res for c in _COMPONENTS for res in c.RESOURCES]

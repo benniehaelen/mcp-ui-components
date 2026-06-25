@@ -19,6 +19,7 @@ WIDGET_URI = "ui://mcp-ui-components/viewer.html"
 JOIN_WIDGET_URI = "ui://mcp-ui-components/join-diagram.html"
 QUERY_PLAN_URI = "ui://mcp-ui-components/query-plan.html"
 QUERY_PROFILE_URI = "ui://mcp-ui-components/query-profile.html"
+TRACE_WATERFALL_URI = "ui://mcp-ui-components/trace-waterfall.html"
 
 # The MCP Apps (SEP-1865) MIME type. A host uses this to recognise that a resource
 # is an interactive App UI rather than plain HTML; hosts reject a UI resource served

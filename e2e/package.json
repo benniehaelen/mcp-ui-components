@@ -1,0 +1,13 @@
+{
+  "name": "mcp-ui-components-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Playwright end-to-end drive of the vendored MCP Apps reference host against the trace waterfall widget.",
+  "scripts": {
+    "test": "playwright test",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

@@ -5,7 +5,7 @@ A runnable reference implementation of **MCP Apps** (SEP-1865): a tool returns a
 interaction the widget performs is proxied back through the host as an MCP tool
 call** — governed by the same auth, guardrails, and traces as a prompt.
 
-One MCP server (`mcp-ui-components`) serves **four** interactive controls, each a real
+One MCP server (`mcp-ui-components`) serves **five** interactive controls, each a real
 MCP App built with the official
 [`@modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps)
 SDK, so they render as live interactive controls in hosts that support MCP Apps —
@@ -17,6 +17,7 @@ SDK, so they render as live interactive controls in hosts that support MCP Apps 
 | **SQL join diagram** | `view_join_diagram` | The joins in a SQL query as draggable table cards (join keys, columns, filters) wired by join-key connectors, alongside the natural-language prompt and the source SQL. |
 | **Query plan** | `view_query_plan` | A whole SQL statement as an EXPLAIN-style logical execution pipeline: one operator box per clause (scan, join, filter, group-by, having, window, project, distinct, sort, limit) in execution order, with CTEs/subqueries as lanes that feed downstream operators. |
 | **Query profile** | `view_query_profile` | A compact analytic card for a SQL query: table / join / operator counts, the join-type and operator mix as mini bar charts, estimated scan, and a heuristic complexity score — all parse-derived (no execution). |
+| **Trace + cost waterfall** | `view_trace_waterfall` | The OpenTelemetry span waterfall for one NL-to-SQL request: one bar per span on a shared time axis, colored by kind (resolver, guardrail, bigquery, claude_api, ...), with a cost chip you can switch between latency, tokens, and dollars. The operational twin of the lineage viewer. |
 
 ![Architecture](docs/mcp-apps-control-plane.png)
 
@@ -54,6 +55,10 @@ offline demo), so they render in dark mode too:
 | `view_query_profile` / `parse_query_profile` (tool schemas + dispatch) | [`src/mcp_ui_components/components/query_profile/__init__.py`](src/mcp_ui_components/components/query_profile/__init__.py) |
 | `ui://mcp-ui-components/query-profile.html` (widget resource, `text/html;profile=mcp-app`) | [`src/mcp_ui_components/widgets/query-profile.html`](src/mcp_ui_components/widgets/query-profile.html) (built from [`widget/`](widget/)) |
 | SQL → profile parser (`sqlglot`, parse-derived analytics) | [`components/query_profile/sql.py`](src/mcp_ui_components/components/query_profile/sql.py) + `QueryProfileProvider` in [`provider.py`](src/mcp_ui_components/components/query_profile/provider.py) |
+| **Trace + cost waterfall** | |
+| `view_trace_waterfall` / `describe_span` / `get_span_cost_breakdown` / `expand_span_children` / `list_recent_traces` (tool schemas + dispatch) | [`src/mcp_ui_components/components/trace_waterfall/__init__.py`](src/mcp_ui_components/components/trace_waterfall/__init__.py) |
+| `ui://mcp-ui-components/trace-waterfall.html` (widget resource, `text/html;profile=mcp-app`) | [`src/mcp_ui_components/widgets/trace-waterfall.html`](src/mcp_ui_components/widgets/trace-waterfall.html) (built from [`widget/`](widget/)) |
+| Trace provider (Cloud Trace / BigQuery stand-in, rate cards) | [`components/trace_waterfall/provider.py`](src/mcp_ui_components/components/trace_waterfall/provider.py) + [`data.py`](src/mcp_ui_components/components/trace_waterfall/data.py) |
 | **Shared** | |
 | Tool/resource registry (aggregates the components) | [`src/mcp_ui_components/registry.py`](src/mcp_ui_components/registry.py) |
 | Shared SQL helpers · seed example · HTML export | [`shared/sql.py`](src/mcp_ui_components/shared/sql.py) · [`examples.py`](src/mcp_ui_components/shared/examples.py) · [`export.py`](src/mcp_ui_components/shared/export.py) |
@@ -68,7 +73,7 @@ change a widget (see [Building the widgets](#building-the-widgets)).
 
 ## Use it in VS Code (the real thing)
 
-VS Code Copilot Chat has full MCP Apps support, so all three widgets render as
+VS Code Copilot Chat has full MCP Apps support, so all five widgets render as
 interactive controls in chat.
 
 1. Install the server's dependencies (`mcp` + `sqlglot`):
@@ -128,7 +133,8 @@ interactive controls in chat.
 3. Start the server in VS Code (`MCP: List Servers → lineage → Start`), then open
    Copilot Chat in **Agent** mode. Either ask in plain language, or reference the
    tool directly with `#` to force the call and render it inline — e.g. type
-   `#view_lineage`, `#view_join_diagram`, `#view_query_plan`, or `#view_query_profile`.
+   `#view_lineage`, `#view_join_diagram`, `#view_query_plan`, `#view_query_profile`,
+   or `#view_trace_waterfall`.
 
    **Lineage viewer** — ask:
 
@@ -187,6 +193,43 @@ interactive controls in chat.
 
    To save a plan, see [Exporting](#exporting) below.
 
+   **Trace + cost waterfall** — ask for a recent request (or omit the id for the
+   most recent trace):
+
+   > Show the trace waterfall for the last NL-to-SQL request
+
+   The model calls `view_trace_waterfall`; VS Code renders the request's
+   OpenTelemetry spans as a waterfall on a shared time axis, annotated with
+   latency, token cost, and BigQuery bytes. This is the operational twin of the
+   lineage viewer: where the lineage viewer answers *"where did this data come
+   from?"*, the waterfall answers *"how did this one request run, and where did
+   the time and money go?"* Every interaction is proxied back through the host as
+   a governed MCP tool call:
+
+   | Interaction | Proxied call |
+   | --- | --- |
+   | **Click a span bar** | `describe_span` → details panel (attributes, events, status, cost, cross-widget links) |
+   | **Click a span's cost chip** | `get_span_cost_breakdown` → cost decomposition (Claude tokens + BigQuery bytes, with rate cards) |
+   | **＋ on a span with lazy children** | `expand_span_children` → reveals that span's children |
+   | **− on a span** | collapse that branch (local) |
+   | **Open the trace picker** | `list_recent_traces` → dropdown of recent traces |
+   | **Pick a different trace** | `view_trace_waterfall` → recenter the waterfall on it |
+   | **Toggle the chip dimension** (latency / tokens / $) | re-color and re-scale the chips (local) |
+   | **Reset view** | restore the initial waterfall (local) |
+
+   A details panel link such as **View lineage for fct_patient_visits** calls
+   `view_lineage` through the host — the same governed round-trip, now jumping
+   from the operational view to the lineage view. The seed data ships two traces:
+   a clean run, and one blocked at the guardrail stage (SQ-007), which renders
+   with a **Blocked** badge on the offending span.
+
+   The trace provider is a Cloud Trace / BigQuery stand-in; the production adapter
+   (OpenTelemetry `_AllSpans`, `mcp_usage_log`, `INFORMATION_SCHEMA.JOBS_BY_PROJECT`,
+   all behind the de-identification / zone-filtering boundary) is documented in
+   [`provider.py`](src/mcp_ui_components/components/trace_waterfall/provider.py), not
+   wired. Rate cards (Claude per-MTok, BigQuery per-TiB) live in provider config,
+   never in the widget.
+
 ### Exporting
 
 The widget renders inside a **sandboxed iframe**, which blocks file downloads —
@@ -223,7 +266,7 @@ Files are written to the **workspace folder** (the server's cwd) by default; set
 
 `demo/host.py` launches the MCP server **and** a vendored copy of the official
 MCP Apps reference host, wired together. It speaks the same protocol VS Code
-uses, so it's a faithful preview — and it exposes **all three** controls.
+uses, so it's a faithful preview — and it exposes **all five** controls.
 
 ```bash
 pip install -e .          # the SQL controls need sqlglot (a declared dependency)
@@ -232,6 +275,7 @@ python demo/host.py
 # SQL join diagram: http://localhost:8080/?tool=view_join_diagram&call=true
 # query plan:       http://localhost:8080/?tool=view_query_plan&call=true
 # query profile:    http://localhost:8080/?tool=view_query_profile&call=true
+# trace waterfall:  http://localhost:8080/?tool=view_trace_waterfall&call=true
 ```
 
 It serves:
@@ -336,6 +380,10 @@ cp dist/query-plan.html ../src/mcp_ui_components/widgets/query-plan.html
 # Query profile:
 npm run build:profile
 cp dist/query-profile.html ../src/mcp_ui_components/widgets/query-profile.html
+
+# Trace + cost waterfall:
+npm run build:trace
+cp dist/trace-waterfall.html ../src/mcp_ui_components/widgets/trace-waterfall.html
 ```
 
 | App | Shell | Source | Served as |
@@ -344,12 +392,14 @@ cp dist/query-profile.html ../src/mcp_ui_components/widgets/query-profile.html
 | SQL join diagram | `widget/join-diagram.html` | `widget/src/join-diagram-app.ts` | `widgets/join-diagram.html` |
 | Query plan | `widget/query-plan.html` | `widget/src/query-plan-app.ts` | `widgets/query-plan.html` |
 | Query profile | `widget/query-profile.html` | `widget/src/query-profile-app.ts` | `widgets/query-profile.html` |
+| Trace + cost waterfall | `widget/trace-waterfall.html` | `widget/src/trace-waterfall-app.ts` | `widgets/trace-waterfall.html` |
 
-> The server re-reads the `join-diagram.html`, `query-plan.html` and
-> `query-profile.html` resources from disk on **every** tool call (their cache is
-> disabled), so after a `build:join` / `build:plan` / `build:profile` + copy you
-> can just re-invoke the tool — no server restart needed. The lineage viewer's
-> HTML *is* cached, so it needs a server restart to pick up a rebuild.
+> The server re-reads the `join-diagram.html`, `query-plan.html`,
+> `query-profile.html` and `trace-waterfall.html` resources from disk on **every**
+> tool call (their cache is disabled), so after a
+> `build:join` / `build:plan` / `build:profile` / `build:trace` + copy you can just
+> re-invoke the tool — no server restart needed. The lineage viewer's HTML *is*
+> cached, so it needs a server restart to pick up a rebuild.
 
 ---
 
@@ -357,7 +407,7 @@ cp dist/query-profile.html ../src/mcp_ui_components/widgets/query-profile.html
 
 ```
 src/mcp_ui_components/
-  __init__.py               version + the four widget URIs + MIME type
+  __init__.py               version + the five widget URIs + MIME type
   registry.py               aggregates the components into the server's tool/resource surface
   server.py                 real MCP server — stdio and streamable HTTP
   shared/
@@ -369,15 +419,18 @@ src/mcp_ui_components/
     join_diagram/           __init__.py · provider.py · sql.py (SQL → join-model parser)
     query_plan/             __init__.py · provider.py · sql.py (SQL → query-plan parser)
     query_profile/          __init__.py · provider.py · sql.py (SQL → profile analytics)
-  widgets/viewer.html        built lineage-viewer widget (committed build output)
-  widgets/join-diagram.html  built join-diagram widget   (committed build output)
-  widgets/query-plan.html    built query-plan widget     (committed build output)
-  widgets/query-profile.html built query-profile widget  (committed build output)
+    trace_waterfall/        __init__.py · provider.py · data.py (seed traces + rate cards)
+  widgets/viewer.html          built lineage-viewer widget  (committed build output)
+  widgets/join-diagram.html    built join-diagram widget    (committed build output)
+  widgets/query-plan.html      built query-plan widget      (committed build output)
+  widgets/query-profile.html   built query-profile widget   (committed build output)
+  widgets/trace-waterfall.html built trace-waterfall widget (committed build output)
 widget/                     TypeScript source for all widgets (Vite single-file builds)
-  index.html / src/lineage-app.ts                lineage viewer
-  join-diagram.html / src/join-diagram-app.ts    SQL join diagram
-  query-plan.html / src/query-plan-app.ts        query plan
-  query-profile.html / src/query-profile-app.ts  query profile
+  index.html / src/lineage-app.ts                  lineage viewer
+  join-diagram.html / src/join-diagram-app.ts      SQL join diagram
+  query-plan.html / src/query-plan-app.ts          query plan
+  query-profile.html / src/query-profile-app.ts    query profile
+  trace-waterfall.html / src/trace-waterfall-app.ts  trace + cost waterfall
 demo/
   host.py                   offline launcher: MCP server + vendored reference host
   _vendor_host/             MIT-licensed prebuilt MCP Apps reference host
@@ -386,6 +439,8 @@ tests/
   test_join_model.py        SQL → join-model parser tests
   test_query_plan.py        SQL → query-plan parser tests
   test_query_profile.py     SQL → query-profile (analytics) parser tests
+  test_trace_provider.py    trace provider + cost roll-ups + dispatch tests
+e2e/                        Playwright drive of the reference host (trace waterfall)
 docs/                       the source diagram + live screenshots
 ```
 
@@ -398,11 +453,21 @@ python -m pytest tests/ -q
 
 `test_provider.py` covers the lineage provider, dispatch, and widget resource;
 `test_join_model.py`, `test_query_plan.py` and `test_query_profile.py` cover the
-SQL → join-model, → query-plan and → profile parsers (and their tool dispatch).
-The lineage control is
-additionally verified end-to-end by driving the official MCP Apps reference host
-against this server with Playwright: it connects, calls `view_lineage`, renders
-the widget, and the proxied `expand_lineage_node` grows the graph to 10 nodes.
+SQL → join-model, → query-plan and → profile parsers (and their tool dispatch);
+`test_trace_provider.py` covers the trace provider, the cost-breakdown roll-ups
+(`total_cost_usd` equals its Claude + BigQuery parts), and dispatch.
+
+The trace + cost waterfall is additionally verified end-to-end by driving the
+official MCP Apps reference host against this server with Playwright:
+
+```bash
+cd e2e
+npm install
+npx playwright install chromium
+npx playwright test        # boots demo/host.py, calls view_trace_waterfall, then
+                           # drives expand_span_children and asserts the six
+                           # resolver spans appear
+```
 
 ---
 

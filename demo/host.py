@@ -140,6 +140,9 @@ def main() -> None:
     print("  to auto-call the tool, or pick view_lineage and click 'Call Tool'.")
     print("  Then click 'Expand upstream' inside the widget — it is proxied")
     print("  back through the host as an expand_lineage_node tool call.\n")
+    print(f"  Or    http://localhost:{HOST_PORT}/?tool=view_trace_waterfall&call=true")
+    print("  for the trace + cost waterfall. Click the + on resolve.pipeline to")
+    print("  reveal its steps via a proxied expand_span_children tool call.\n")
     print("  Ctrl+C to stop.\n")
 
     try:
